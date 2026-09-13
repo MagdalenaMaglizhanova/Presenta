@@ -1,24 +1,40 @@
 // src/components/StudentViewer.tsx
 // Минимален компонент САМО за ученици – само гледат слайда.
-// Първо въвеждат име (като в Kahoot), после гледат.
+// 1. Въвеждат име + избират аватар (Kahoot стил)
+// 2. Виждат countdown 3, 2, 1, START!
+// 3. Гледат презентацията
 
 import React, { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { WifiOff, Loader2, User, ArrowRight, Sparkles } from "lucide-react";
+import { WifiOff, User, ArrowRight, Sparkles } from "lucide-react";
 import { SlideViewer } from "./PresentationEditor";
 
-// Ключ за sessionStorage (за да не пита при презареждане)
+// ─── Аватари (emoji, за да няма нужда от файлове) ─────────────
+const AVATARS = [
+  "🦊", "🐼", "🐯", "🦁",
+  "🐸", "🐙", "🦄", "🐲",
+  "🐵", "🐧", "🦉", "🐺",
+];
+
+// Ключове за sessionStorage
 const getNameKey = (sessionId: string) => `presenta_student_name_${sessionId}`;
+const getAvatarKey = (sessionId: string) => `presenta_student_avatar_${sessionId}`;
+
+type Phase = "name" | "countdown" | "live";
 
 export const StudentViewer: React.FC = () => {
   const [searchParams] = useSearchParams();
   const sessionId = searchParams.get("session");
 
-  // 🔥 Име на ученика
+  // 🔥 Име + аватар
   const [studentName, setStudentName] = useState<string>("");
+  const [studentAvatar, setStudentAvatar] = useState<string>("🦊");
   const [nameConfirmed, setNameConfirmed] = useState<boolean>(false);
   const [nameInput, setNameInput] = useState<string>("");
+
+  // 🔥 Фаза: име → countdown → live
+  const [phase, setPhase] = useState<Phase>("name");
 
   const [slides, setSlides] = useState<any[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -29,6 +45,7 @@ export const StudentViewer: React.FC = () => {
   const currentIndexRef = useRef(0);
   const slidesRef = useRef<any[]>([]);
   const nameRef = useRef<string>("");
+  const avatarRef = useRef<string>("");
 
   // Синхронизираме refs
   useEffect(() => {
@@ -43,13 +60,22 @@ export const StudentViewer: React.FC = () => {
     nameRef.current = studentName;
   }, [studentName]);
 
+  useEffect(() => {
+    avatarRef.current = studentAvatar;
+  }, [studentAvatar]);
+
   // 🔥 Проверяваме sessionStorage при зареждане
   useEffect(() => {
     if (!sessionId) return;
     const savedName = sessionStorage.getItem(getNameKey(sessionId));
+    const savedAvatar = sessionStorage.getItem(getAvatarKey(sessionId));
+
     if (savedName && savedName.trim().length > 0) {
       setStudentName(savedName);
+      if (savedAvatar) setStudentAvatar(savedAvatar);
       setNameConfirmed(true);
+      // 🔥 Ако вече е влизал, пропускаме countdown-а
+      setPhase("live");
     }
   }, [sessionId]);
 
@@ -60,10 +86,12 @@ export const StudentViewer: React.FC = () => {
 
     setStudentName(trimmed);
     setNameConfirmed(true);
+    setPhase("countdown"); // 👈 Стартираме countdown
 
     // Запазваме в sessionStorage
     if (sessionId) {
       sessionStorage.setItem(getNameKey(sessionId), trimmed);
+      sessionStorage.setItem(getAvatarKey(sessionId), studentAvatar);
     }
   };
 
@@ -85,20 +113,20 @@ export const StudentViewer: React.FC = () => {
 
     ws.onopen = () => {
       setStatus("online");
-      console.log("✅ Ученик свързан към сесия:", sessionId, "| Име:", nameRef.current);
+      console.log("✅ Ученик свързан към сесия:", sessionId, "| Име:", nameRef.current, "| Аватар:", avatarRef.current);
 
-      // 🔥 Първо съобщаваме на сървъра кой е ученикът
+      // 🔥 Съобщаваме на сървъра кой е ученикът (с аватар!)
       ws.send(
         JSON.stringify({
           type: "STUDENT_JOINED",
           name: nameRef.current,
+          avatar: avatarRef.current,
           joinedAt: Date.now(),
         })
       );
 
-      // После искаме презентацията
+      // Искаме презентацията
       ws.send(JSON.stringify({ type: "REQUEST_PRESENTATION" }));
-      console.log("📤 Изпратена заявка за презентация");
 
       // Retry на всеки 2 сек, докато не получим слайдовете
       requestInterval = setInterval(() => {
@@ -111,7 +139,6 @@ export const StudentViewer: React.FC = () => {
           return;
         }
         ws.send(JSON.stringify({ type: "REQUEST_PRESENTATION" }));
-        console.log("📤 Retry: заявка за презентация");
       }, 2000);
 
       giveUpTimeout = setTimeout(() => {
@@ -142,7 +169,6 @@ export const StudentViewer: React.FC = () => {
             }
             if (msg.slides && Array.isArray(msg.slides) && msg.slides.length > 0) {
               setSlides(msg.slides);
-              console.log(`📄 Получени ${msg.slides.length} слайда (${msg.type})`);
             }
             break;
           }
@@ -150,7 +176,6 @@ export const StudentViewer: React.FC = () => {
           case "PRESENTATION_DATA": {
             if (msg.slides && Array.isArray(msg.slides)) {
               setSlides(msg.slides);
-              console.log(`📄 Получени ${msg.slides.length} слайда (PRESENTATION_DATA)`);
               if (Number.isInteger(msg.slide)) {
                 setDirection(msg.slide >= currentIndexRef.current ? 1 : -1);
                 setCurrentIndex(msg.slide);
@@ -194,9 +219,9 @@ export const StudentViewer: React.FC = () => {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // 👤 2. ЕКРАН ЗА ВЪВЕЖДАНЕ НА ИМЕ (Kahoot стил)
+  // 👤 2. ЕКРАН ЗА ВЪВЕЖДАНЕ НА ИМЕ + АВАТАР (Kahoot стил)
   // ═══════════════════════════════════════════════════════════════
-  if (!nameConfirmed) {
+  if (phase === "name") {
     return (
       <div className="min-h-screen bg-[#0A162B] flex items-center justify-center p-6 relative overflow-hidden">
         {/* Декоративни елементи */}
@@ -208,10 +233,10 @@ export const StudentViewer: React.FC = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="relative z-10 w-full max-w-md"
+          className="relative z-10 w-full max-w-lg"
         >
           {/* Лого */}
-          <div className="flex flex-col items-center mb-8">
+          <div className="flex flex-col items-center mb-6">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#5B3FD1] to-[#18BFC7] flex items-center justify-center shadow-2xl shadow-[#5B3FD1]/40 mb-4">
               <Sparkles className="w-8 h-8 text-white" />
             </div>
@@ -223,20 +248,59 @@ export const StudentViewer: React.FC = () => {
             </p>
           </div>
 
-          {/* Картичка за име */}
-          <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-8 shadow-2xl">
+          {/* Картичка за име + аватар */}
+          <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl">
+            {/* Avatar picker */}
             <div className="flex flex-col items-center mb-6">
-              <div className="w-14 h-14 rounded-full bg-[#5B3FD1]/20 border border-[#5B3FD1]/30 flex items-center justify-center mb-3">
-                <User className="w-7 h-7 text-[#7C5CE7]" />
+              <h2 className="text-lg font-bold text-white mb-1">Избери си аватар</h2>
+              <p className="text-xs text-white/40 mb-4">Ще се вижда до името ти</p>
+
+              {/* Голям preview на избрания аватар */}
+              <motion.div
+                key={studentAvatar}
+                initial={{ scale: 0.5, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                className="w-24 h-24 rounded-full bg-gradient-to-br from-[#5B3FD1]/30 to-[#18BFC7]/20 border-2 border-[#7C5CE7]/50 flex items-center justify-center text-5xl mb-4 shadow-xl shadow-[#5B3FD1]/30"
+              >
+                {studentAvatar}
+              </motion.div>
+
+              {/* Grid с аватари */}
+              <div className="grid grid-cols-6 gap-2 w-full max-w-md">
+                {AVATARS.map((avatar) => (
+                  <button
+                    key={avatar}
+                    onClick={() => setStudentAvatar(avatar)}
+                    className={`aspect-square rounded-xl flex items-center justify-center text-2xl transition-all ${
+                      studentAvatar === avatar
+                        ? "bg-[#5B3FD1]/40 border-2 border-[#7C5CE7] scale-110 shadow-lg shadow-[#5B3FD1]/40"
+                        : "bg-white/5 border-2 border-white/10 hover:bg-white/10 hover:scale-105"
+                    }`}
+                  >
+                    {avatar}
+                  </button>
+                ))}
               </div>
-              <h2 className="text-lg font-bold text-white">Как се казваш?</h2>
-              <p className="text-xs text-white/40 mt-1 text-center">
-                Името ще се вижда само от учителя
-              </p>
+            </div>
+
+            {/* Divider */}
+            <div className="flex items-center gap-3 mb-6">
+              <div className="flex-1 h-px bg-white/10" />
+              <span className="text-[10px] uppercase tracking-wider text-white/30 font-bold">
+                После
+              </span>
+              <div className="flex-1 h-px bg-white/10" />
             </div>
 
             {/* Input за име */}
             <div className="mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-8 h-8 rounded-full bg-[#5B3FD1]/20 border border-[#5B3FD1]/30 flex items-center justify-center">
+                  <User className="w-4 h-4 text-[#7C5CE7]" />
+                </div>
+                <h2 className="text-base font-bold text-white">Как се казваш?</h2>
+              </div>
               <input
                 type="text"
                 value={nameInput}
@@ -282,7 +346,18 @@ export const StudentViewer: React.FC = () => {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // 🔴 3. Връзката е прекъсната
+  // 🎬 3. COUNTDOWN: 3 → 2 → 1 → START! (Kahoot стил)
+  // ═══════════════════════════════════════════════════════════════
+  if (phase === "countdown") {
+    return <CountdownScreen
+      name={studentName}
+      avatar={studentAvatar}
+      onFinish={() => setPhase("live")}
+    />;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // 🔴 4. Връзката е прекъсната
   // ═══════════════════════════════════════════════════════════════
   if (status === "offline") {
     return (
@@ -308,7 +383,7 @@ export const StudentViewer: React.FC = () => {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // ⏳ 4. Изчакване на първите слайдове
+  // ⏳ 5. Изчакване на първите слайдове
   // ═══════════════════════════════════════════════════════════════
   if (slides.length === 0) {
     return (
@@ -324,11 +399,10 @@ export const StudentViewer: React.FC = () => {
             <div className="absolute inset-0 rounded-full border-2 border-[#5B3FD1]/20" />
             <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-[#18BFC7] animate-spin" />
             <div className="absolute inset-0 flex items-center justify-center">
-              <Loader2 className="w-8 h-8 text-[#4cc9ff]" />
+              <span className="text-3xl">{studentAvatar}</span>
             </div>
           </div>
 
-          {/* Поздрав с името */}
           <p className="text-2xl font-bold text-white mb-2">
             Здравей, <span className="text-[#4cc9ff]">{studentName}</span>! 👋
           </p>
@@ -346,7 +420,7 @@ export const StudentViewer: React.FC = () => {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // ✅ 5. Показваме слайда
+  // ✅ 6. Показваме слайда
   // ═══════════════════════════════════════════════════════════════
   const currentSlide = slides[currentIndex] || slides[0];
   const progress = ((currentIndex + 1) / slides.length) * 100;
@@ -363,10 +437,10 @@ export const StudentViewer: React.FC = () => {
         />
       </div>
 
-      {/* Badge с името (горе вдясно) */}
+      {/* Badge с аватар + име */}
       <div className="fixed top-3 right-3 z-40 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10">
-        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#5B3FD1] to-[#18BFC7] flex items-center justify-center text-white text-[10px] font-bold">
-          {studentName.charAt(0).toUpperCase()}
+        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#5B3FD1] to-[#18BFC7] flex items-center justify-center text-base shrink-0">
+          {studentAvatar}
         </div>
         <span className="text-xs text-white/80 font-medium max-w-[120px] truncate">
           {studentName}
@@ -392,6 +466,149 @@ export const StudentViewer: React.FC = () => {
         </div>
       </div>
     </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════
+// 🎬 COUNTDOWN COMPONENT: 3 → 2 → 1 → START!
+// ═══════════════════════════════════════════════════════════════
+
+const CountdownScreen: React.FC<{
+  name: string;
+  avatar: string;
+  onFinish: () => void;
+}> = ({ name, avatar, onFinish }) => {
+  const [count, setCount] = useState(3);
+  const [showStart, setShowStart] = useState(false);
+  const [bgColor, setBgColor] = useState("#5B3FD1");
+
+  // Цветове за всеки етап (Kahoot стил)
+  const colors = ["#5B3FD1", "#18BFC7", "#FF4B4B", "#00E676"];
+
+  useEffect(() => {
+    if (count > 0) {
+      setBgColor(colors[3 - count] || "#5B3FD1");
+      const timer = setTimeout(() => setCount(count - 1), 1000);
+      return () => clearTimeout(timer);
+    } else {
+      // Показваме START! за 1.5 сек
+      setBgColor("#00E676");
+      setShowStart(true);
+      const timer = setTimeout(() => {
+        onFinish();
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [count, onFinish]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden"
+      style={{
+        background: `radial-gradient(circle at center, ${bgColor}40 0%, #0A162B 70%)`,
+        transition: "background 0.5s ease",
+      }}
+    >
+      {/* Декоративни елементи */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full border border-white/5" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full border border-white/5" />
+
+      {/* Поздрав горе */}
+      <div className="absolute top-8 left-0 right-0 text-center">
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 backdrop-blur-md border border-white/10">
+          <span className="text-2xl">{avatar}</span>
+          <span className="text-sm font-semibold text-white/90">{name}</span>
+        </div>
+      </div>
+
+      {/* Централен текст */}
+      <div className="relative z-10 flex flex-col items-center">
+        <AnimatePresence mode="wait">
+          {!showStart ? (
+            <motion.div
+              key={`num-${count}`}
+              initial={{ scale: 0, rotate: -180, opacity: 0 }}
+              animate={{ scale: 1, rotate: 0, opacity: 1 }}
+              exit={{ scale: 2, rotate: 180, opacity: 0 }}
+              transition={{
+                type: "spring",
+                stiffness: 260,
+                damping: 20,
+                duration: 0.5,
+              }}
+              className="text-[12rem] sm:text-[16rem] font-black leading-none"
+              style={{
+                background: `linear-gradient(135deg, #ffffff 0%, ${bgColor} 100%)`,
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                filter: `drop-shadow(0 0 60px ${bgColor})`,
+              }}
+            >
+              {count}
+            </motion.div>
+          ) : (
+            <motion.div
+              key="start"
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 3, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 200, damping: 15 }}
+              className="text-center"
+            >
+              <div
+                className="text-7xl sm:text-9xl md:text-[10rem] font-black tracking-tight"
+                style={{
+                  background: "linear-gradient(135deg, #ffffff 0%, #00E676 100%)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  filter: "drop-shadow(0 0 80px #00E676)",
+                }}
+              >
+                START!
+              </div>
+              <motion.p
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="text-white/60 text-lg mt-4 font-medium"
+              >
+                Приготви се...
+              </motion.p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Прогрес индикатори долу */}
+      <div className="absolute bottom-12 left-0 right-0 flex items-center justify-center gap-3">
+        {[3, 2, 1].map((n) => (
+          <motion.div
+            key={n}
+            animate={{
+              scale: count <= n && count > 0 ? 1.4 : 1,
+              backgroundColor:
+                count < n
+                  ? "#00E676"
+                  : count === n
+                  ? bgColor
+                  : "rgba(255,255,255,0.1)",
+            }}
+            transition={{ duration: 0.3 }}
+            className="w-3 h-3 rounded-full"
+          />
+        ))}
+        <motion.div
+          animate={{
+            scale: showStart ? 1.4 : 1,
+            backgroundColor: showStart ? "#00E676" : "rgba(255,255,255,0.1)",
+          }}
+          transition={{ duration: 0.3 }}
+          className="w-3 h-3 rounded-full"
+        />
+      </div>
+    </motion.div>
   );
 };
 
