@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect} from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import {
   Plus,
   Trash2,
@@ -21,13 +21,25 @@ import {
   ShieldCheck,
   Users,
   Circle,
+  Save,
+  FolderOpen,
+  X,
+  Check,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 
 // ═══════════════════════════════════════════════════════════════════
-// 🔐 УЧИТЕЛСКИ PIN КОД – смени тук за друг код
+// 🔐 УЧИТЕЛСКИ PIN КОД
 // ═══════════════════════════════════════════════════════════════════
 const TEACHER_PIN = "2024";
 const PIN_STORAGE_KEY = "presenta_teacher_unlocked";
+
+// ═══════════════════════════════════════════════════════════════════
+// 🌐 API CONFIG
+// ═══════════════════════════════════════════════════════════════════
+const API_URL = import.meta.env.VITE_API_URL || "https://server-presenta.onrender.com";
+const WS_URL = import.meta.env.VITE_WS_URL || "wss://server-presenta.onrender.com";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -65,7 +77,15 @@ interface Presentation {
 
 interface Student {
   name: string;
+  avatar?: string;
   joinedAt: number;
+}
+
+interface SavedPresentation {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────
@@ -104,15 +124,67 @@ const SLIDE_META: Record<SlideType, { icon: React.ReactNode; label: string; colo
   crypto:    { icon: <Lock className="w-4 h-4" />,       label: "Криптиране",   color: "from-[#FF8A00] to-[#FF4B4B]" },
 };
 
-
-
-
-
 // ─── Default Presentation ────────────────────────────────────────
 
 const DEFAULT_PRESENTATION: Presentation = {
   title: "Нова презентация",
   slides: [createSlide("title")],
+};
+
+// ─── Date formatter ──────────────────────────────────────────────
+
+const formatDate = (iso: string) => {
+  const d = new Date(iso);
+  return d.toLocaleString("bg-BG", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+// ═══════════════════════════════════════════════════════════════════
+// 🍞 TOAST COMPONENT
+// ═══════════════════════════════════════════════════════════════════
+
+const Toast: React.FC<{
+  type: "success" | "error" | "info";
+  message: string;
+  onClose: () => void;
+}> = ({ type, message, onClose }) => {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3500);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const colors = {
+    success: "from-green-500/20 to-green-600/10 border-green-500/40 text-green-300",
+    error: "from-red-500/20 to-red-600/10 border-red-500/40 text-red-300",
+    info: "from-[#5B3FD1]/20 to-[#18BFC7]/10 border-[#5B3FD1]/40 text-[#A78BFA]",
+  };
+
+  const icons = {
+    success: <Check className="w-5 h-5" />,
+    error: <AlertCircle className="w-5 h-5" />,
+    info: <FileText className="w-5 h-5" />,
+  };
+
+  return (
+    <div
+      className={`fixed bottom-6 right-6 z-[100] flex items-center gap-3 px-5 py-3.5 rounded-2xl bg-gradient-to-br ${colors[type]} backdrop-blur-md shadow-2xl border`}
+      style={{ animation: "slideIn 0.3s ease-out" }}
+    >
+      {icons[type]}
+      <span className="text-sm font-medium">{message}</span>
+      <button
+        onClick={onClose}
+        className="ml-2 opacity-60 hover:opacity-100 transition-opacity"
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  );
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -258,11 +330,169 @@ const PinLock: React.FC<{ onUnlock: () => void }> = ({ onUnlock }) => {
         .animate-shake {
           animation: shake 0.4s ease-in-out;
         }
+        @keyframes slideIn {
+          from { transform: translateX(400px); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
       `}</style>
     </div>
   );
 };
 
+// ═══════════════════════════════════════════════════════════════════
+// 📂 PRESENTATIONS MODAL
+// ═══════════════════════════════════════════════════════════════════
+
+const PresentationsModal: React.FC<{
+  presentations: SavedPresentation[];
+  currentId: string | null;
+  isLoading: boolean;
+  onLoad: (id: string) => void;
+  onDelete: (id: string) => void;
+  onClose: () => void;
+  onRefresh: () => void;
+}> = ({ presentations, currentId, isLoading, onLoad, onDelete, onClose, onRefresh }) => {
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-[#0F1E36] border border-white/10 rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between p-5 border-b border-white/5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#5B3FD1] to-[#18BFC7] flex items-center justify-center">
+              <FolderOpen className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-white">Моите презентации</h2>
+              <p className="text-xs text-white/40">
+                {presentations.length} {presentations.length === 1 ? "презентация" : "презентации"}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onRefresh}
+              disabled={isLoading}
+              className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 hover:text-white transition-colors disabled:opacity-30"
+              title="Обнови"
+            >
+              <Loader2 className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 hover:text-white transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-16">
+              <Loader2 className="w-8 h-8 text-[#5B3FD1] animate-spin mb-3" />
+              <p className="text-sm text-white/50">Зареждане...</p>
+            </div>
+          ) : presentations.length === 0 ? (
+            <div className="text-center py-16">
+              <FolderOpen className="w-16 h-16 mx-auto mb-4 text-white/20" />
+              <p className="text-white/50 mb-1">Няма запазени презентации</p>
+              <p className="text-xs text-white/30">
+                Натисни „Запази" за да запазиш текущата
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {presentations.map((p) => {
+                const isCurrent = p.id === currentId;
+                return (
+                  <div
+                    key={p.id}
+                    className={`group flex items-center gap-3 p-4 rounded-xl border transition-all ${
+                      isCurrent
+                        ? "bg-[#5B3FD1]/20 border-[#7C5CE7]/40"
+                        : "bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/20"
+                    }`}
+                  >
+                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#5B3FD1]/40 to-[#18BFC7]/30 flex items-center justify-center shrink-0">
+                      <FileText className="w-5 h-5 text-white/80" />
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-white truncate">
+                          {p.title}
+                        </p>
+                        {isCurrent && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/20 border border-green-500/40 text-green-300 font-bold shrink-0">
+                            ● ТЕКУЩА
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-white/40 mt-0.5">
+                        Обновена: {formatDate(p.updated_at)}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => onLoad(p.id)}
+                        className="px-3 py-1.5 rounded-lg bg-[#5B3FD1]/30 hover:bg-[#5B3FD1]/50 border border-[#7C5CE7]/40 text-white text-xs font-medium transition-colors flex items-center gap-1"
+                        title="Зареди"
+                      >
+                        <FolderOpen className="w-3 h-3" />
+                        Зареди
+                      </button>
+                      <button
+                        onClick={() => setConfirmDelete(p.id)}
+                        className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/30 border border-red-500/30 text-red-300 transition-colors"
+                        title="Изтрий"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {confirmDelete && (
+          <div className="p-4 border-t border-white/10 bg-red-500/10">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
+              <p className="flex-1 text-sm text-white/90">
+                Сигурен ли си, че искаш да изтриеш тази презентация?
+              </p>
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 text-xs transition-colors"
+              >
+                Отказ
+              </button>
+              <button
+                onClick={() => {
+                  onDelete(confirmDelete);
+                  setConfirmDelete(null);
+                }}
+                className="px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-colors"
+              >
+                Изтрий
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 // ─── Slide Thumbnail ──────────────────────────────────────────────
 
@@ -326,23 +556,167 @@ export const PresentationEditor: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
 
+  // 💾 SAVE / LOAD state
+  const [currentPresentationId, setCurrentPresentationId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingList, setIsLoadingList] = useState(false);
+  const [savedPresentations, setSavedPresentations] = useState<SavedPresentation[]>([]);
+  const [showPresentationsModal, setShowPresentationsModal] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [toast, setToast] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
+
+  // 🔧 Ref за skip на hasUnsavedChanges при load/new/import
+  const skipNextUnsavedRef = useRef(false);
+  // 🔧 Ref за да не маркираме като unsaved при първоначалния mount
+  const isFirstMountRef = useRef(true);
+
   const currentSlide = presentation.slides[selectedIndex];
+
+  // ─── Mark as unsaved when presentation changes ────────────────
+  useEffect(() => {
+    if (!unlocked) return;
+    
+    // Първоначален mount – не маркираме като unsaved
+    if (isFirstMountRef.current) {
+      isFirstMountRef.current = false;
+      return;
+    }
+
+    // Skip ако сме заредили/създали нова презентация
+    if (skipNextUnsavedRef.current) {
+      skipNextUnsavedRef.current = false;
+      return;
+    }
+
+    setHasUnsavedChanges(true);
+  }, [presentation, unlocked]);
+
+  // ─── Toast helper ─────────────────────────────────────────────
+  const showToast = (type: "success" | "error" | "info", message: string) => {
+    setToast({ type, message });
+  };
+
+  // ═════════════════════════════════════════════════════════════
+  // 💾 SAVE / LOAD FUNCTIONS
+  // ═════════════════════════════════════════════════════════════
+
+  const savePresentation = useCallback(async (saveAsNew: boolean = false) => {
+    setIsSaving(true);
+
+    try {
+      const isUpdate = !saveAsNew && currentPresentationId !== null;
+      const url = isUpdate
+        ? `${API_URL}/api/presentations/${currentPresentationId}`
+        : `${API_URL}/api/presentations`;
+      const method = isUpdate ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: presentation.title || "Без заглавие",
+          slides: presentation.slides,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Грешка при запазване");
+      }
+
+      const data = await res.json();
+      setCurrentPresentationId(data.id);
+      setHasUnsavedChanges(false);
+      showToast("success", isUpdate ? "✅ Презентацията е обновена!" : "✅ Презентацията е запазена!");
+    } catch (err: any) {
+      console.error("Save error:", err);
+      showToast("error", `❌ ${err.message || "Грешка при запазване"}`);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [presentation, currentPresentationId]);
+
+  const loadPresentationsList = useCallback(async () => {
+    setIsLoadingList(true);
+    try {
+      const res = await fetch(`${API_URL}/api/presentations`);
+      if (!res.ok) throw new Error("Грешка при зареждане");
+      const data = await res.json();
+      setSavedPresentations(data.presentations || []);
+    } catch (err: any) {
+      console.error("List error:", err);
+      showToast("error", "❌ Не мога да заредя списъка");
+    } finally {
+      setIsLoadingList(false);
+    }
+  }, []);
+
+  const loadPresentation = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`${API_URL}/api/presentations/${id}`);
+      if (!res.ok) throw new Error("Презентацията не е намерена");
+      const data = await res.json();
+
+      skipNextUnsavedRef.current = true;
+      setPresentation({
+        title: data.title || "Без заглавие",
+        slides: data.slides || [],
+      });
+      setCurrentPresentationId(data.id);
+      setSelectedIndex(0);
+      setHasUnsavedChanges(false);
+      setShowPresentationsModal(false);
+      showToast("success", `📂 Заредена: ${data.title}`);
+    } catch (err: any) {
+      console.error("Load error:", err);
+      showToast("error", `❌ ${err.message}`);
+    }
+  }, []);
+
+  const deletePresentation = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`${API_URL}/api/presentations/${id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error("Грешка при изтриване");
+
+      setSavedPresentations((prev) => prev.filter((p) => p.id !== id));
+
+      if (id === currentPresentationId) {
+        setCurrentPresentationId(null);
+      }
+
+      showToast("success", "🗑️ Презентацията е изтрита");
+    } catch (err: any) {
+      console.error("Delete error:", err);
+      showToast("error", `❌ ${err.message}`);
+    }
+  }, [currentPresentationId]);
+
+  const openPresentationsModal = useCallback(() => {
+    setShowPresentationsModal(true);
+    loadPresentationsList();
+  }, [loadPresentationsList]);
 
   // ─── WebSocket ─────────────────────────────────────────────────
 
   const connectToServer = useCallback(async (presentationId: string) => {
     try {
-      const res = await fetch("https://server-presenta.onrender.com/api/sessions", {
+      const res = await fetch(`${API_URL}/api/sessions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ presentationId }),
+        body: JSON.stringify({
+          presentationId,
+          presentationTitle: presentation.title,
+          totalSlides: presentation.slides.length,
+        }),
       });
       const data = await res.json();
       if (!data.sessionId) throw new Error("No session");
       setSessionId(data.sessionId);
       setLiveStatus("connecting");
 
-      const ws = new WebSocket(`wss://server-presenta.onrender.com/ws?session=${data.sessionId}`);
+      const ws = new WebSocket(`${WS_URL}/ws?session=${data.sessionId}`);
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -378,7 +752,6 @@ export const PresentationEditor: React.FC = () => {
             }
           }
 
-          // 🔥 Списък с ученици
           if (msg.type === "STUDENT_LIST") {
             setStudents(msg.students || []);
             console.log(`👥 Ученици в сесията: ${msg.count || 0}`);
@@ -458,6 +831,25 @@ export const PresentationEditor: React.FC = () => {
     [selectedIndex, updateSlide]
   );
 
+  const newPresentation = useCallback(() => {
+    if (hasUnsavedChanges) {
+      const ok = window.confirm(
+        "Имаш незаписани промени. Сигурен ли си, че искаш да създадеш нова презентация?"
+      );
+      if (!ok) return;
+    }
+
+    skipNextUnsavedRef.current = true;
+    setPresentation({
+      title: "Нова презентация",
+      slides: [createSlide("title")],
+    });
+    setCurrentPresentationId(null);
+    setSelectedIndex(0);
+    setHasUnsavedChanges(false);
+    showToast("info", "📄 Нова презентация");
+  }, [hasUnsavedChanges]);
+
   // ─── Presentation Mode ─────────────────────────────────────────
 
   const togglePresent = useCallback(async () => {
@@ -514,17 +906,34 @@ export const PresentationEditor: React.FC = () => {
         try {
           const data = JSON.parse(ev.target?.result as string);
           if (data.presentation && data.presentation.slides) {
+            skipNextUnsavedRef.current = true;
             setPresentation(data.presentation);
             setSelectedIndex(0);
+            setCurrentPresentationId(null);
+            showToast("success", "📥 Импортирана презентация");
           }
         } catch {
-          alert("Невалиден JSON файл");
+          showToast("error", "❌ Невалиден JSON файл");
         }
       };
       reader.readAsText(file);
     };
     input.click();
   }, []);
+
+  // ─── Keyboard shortcut: Ctrl+S за запазване ───────────────────
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        if (unlocked && !isSaving) {
+          savePresentation(false);
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [unlocked, isSaving, savePresentation]);
 
   // ══════════════════════════════════════════════════════════════
   // 🔐 PIN CHECK
@@ -538,7 +947,7 @@ export const PresentationEditor: React.FC = () => {
   return (
     <div className="h-screen bg-[#0A162B] text-white flex flex-col overflow-hidden">
       {/* ═══ TOOLBAR ═══ */}
-      <header className="shrink-0 bg-[#0A162B]/95 backdrop-blur-md border-b border-white/5 px-4 py-3 flex items-center gap-4">
+      <header className="shrink-0 bg-[#0A162B]/95 backdrop-blur-md border-b border-white/5 px-4 py-3 flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-3 shrink-0">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#5B3FD1] to-[#18BFC7] flex items-center justify-center shadow-lg shadow-[#5B3FD1]/30">
             <Layout className="w-5 h-5 text-white" />
@@ -548,16 +957,23 @@ export const PresentationEditor: React.FC = () => {
           </span>
         </div>
 
-        <div className="w-px h-8 bg-white/10" />
+        <div className="w-px h-8 bg-white/10 hidden sm:block" />
 
-        <input
-          value={presentation.title}
-          onChange={(e) => setPresentation((p) => ({ ...p, title: e.target.value }))}
-          placeholder="Име на презентацията"
-          className="flex-1 max-w-md bg-transparent border-none text-base font-semibold text-white placeholder-white/30 focus:outline-none focus:bg-white/5 rounded-lg px-3 py-1.5 transition-colors"
-        />
+        <div className="flex-1 flex items-center gap-2 min-w-[180px]">
+          <input
+            value={presentation.title}
+            onChange={(e) => setPresentation((p) => ({ ...p, title: e.target.value }))}
+            placeholder="Име на презентацията"
+            className="flex-1 bg-transparent border-none text-base font-semibold text-white placeholder-white/30 focus:outline-none focus:bg-white/5 rounded-lg px-3 py-1.5 transition-colors"
+          />
+          {hasUnsavedChanges && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 font-bold whitespace-nowrap">
+              ● незаписано
+            </span>
+          )}
+        </div>
 
-        <div className="flex items-center gap-2 ml-auto">
+        <div className="flex items-center gap-2">
           <span
             className={`text-[11px] px-2.5 py-1 rounded-full border font-medium whitespace-nowrap ${
               liveStatus === "online"
@@ -580,7 +996,46 @@ export const PresentationEditor: React.FC = () => {
           )}
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <button
+            onClick={newPresentation}
+            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 hover:text-white transition-colors"
+            title="Нова презентация"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={openPresentationsModal}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white transition-colors text-sm"
+            title="Моите презентации"
+          >
+            <FolderOpen className="w-4 h-4" />
+            <span className="hidden md:inline">Моите</span>
+          </button>
+
+          <button
+            onClick={() => savePresentation(false)}
+            disabled={isSaving}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-semibold transition-all disabled:opacity-50 ${
+              hasUnsavedChanges
+                ? "bg-gradient-to-r from-green-500/80 to-green-600/80 hover:from-green-500 hover:to-green-600 border-green-500/40 text-white"
+                : "bg-white/5 hover:bg-white/10 border-white/10 text-white/60"
+            }`}
+            title={currentPresentationId ? "Обнови (Ctrl+S)" : "Запази (Ctrl+S)"}
+          >
+            {isSaving ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            <span className="hidden md:inline">
+              {currentPresentationId ? "Обнови" : "Запази"}
+            </span>
+          </button>
+
+          <div className="w-px h-6 bg-white/10 hidden sm:block" />
+
           <button
             onClick={importData}
             className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 hover:text-white transition-colors"
@@ -595,6 +1050,7 @@ export const PresentationEditor: React.FC = () => {
           >
             <FileJson className="w-4 h-4" />
           </button>
+
           <button
             onClick={togglePresent}
             className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-[#5B3FD1] to-[#18BFC7] hover:shadow-lg hover:shadow-[#5B3FD1]/30 text-sm font-semibold transition-all"
@@ -752,8 +1208,6 @@ export const PresentationEditor: React.FC = () => {
 
         {/* ─── RIGHT SIDEBAR: STUDENTS + PROPERTIES ─── */}
         <aside className="w-80 shrink-0 bg-[#0A162B]/60 border-l border-white/5 flex flex-col overflow-hidden">
-
-          {/* 🔥 СПИСЪК С УЧЕНИЦИ (горе) */}
           <div className="shrink-0 border-b border-white/5">
             <div className="px-4 py-3 flex items-center justify-between">
               <h3 className="text-[10px] uppercase tracking-wider text-white/40 font-bold flex items-center gap-1.5">
@@ -782,8 +1236,8 @@ export const PresentationEditor: React.FC = () => {
                       key={`${s.name}-${i}`}
                       className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-white/5 border border-white/5 hover:bg-white/10 transition-colors"
                     >
-                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#5B3FD1] to-[#18BFC7] flex items-center justify-center text-white text-[10px] font-bold shrink-0">
-                        {s.name.charAt(0).toUpperCase()}
+                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#5B3FD1] to-[#18BFC7] flex items-center justify-center text-base shrink-0">
+                        {s.avatar || s.name.charAt(0).toUpperCase()}
                       </div>
 
                       <span className="text-xs text-white/85 font-medium truncate flex-1">
@@ -798,7 +1252,7 @@ export const PresentationEditor: React.FC = () => {
             </div>
           </div>
 
-          {/* PROPERTIES (долу) */}
+          {/* PROPERTIES */}
           <div className="flex-1 overflow-y-auto">
             {currentSlide ? (
               <div className="p-4 space-y-5">
@@ -1050,11 +1504,32 @@ export const PresentationEditor: React.FC = () => {
           </div>
         </aside>
       </div>
+
+      {/* ═══ MODALS & TOASTS ═══ */}
+      {showPresentationsModal && (
+        <PresentationsModal
+          presentations={savedPresentations}
+          currentId={currentPresentationId}
+          isLoading={isLoadingList}
+          onLoad={loadPresentation}
+          onDelete={deletePresentation}
+          onClose={() => setShowPresentationsModal(false)}
+          onRefresh={loadPresentationsList}
+        />
+      )}
+
+      {toast && (
+        <Toast
+          type={toast.type}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 };
 
-// ─── Slide Viewer ────────────────────────────────────────────────
+// ─── Slide Viewer (непроменен) ────────────────────────────────────
 
 export const SlideViewer: React.FC<{ slide: Slide }> = ({ slide }) => {
   if (!slide) return <div className="text-white/20">Изберете слайд</div>;
@@ -1073,44 +1548,27 @@ export const SlideViewer: React.FC<{ slide: Slide }> = ({ slide }) => {
                 <div className="absolute inset-0 rounded-full border border-white/10 animate-pulse" />
                 <div className="absolute inset-4 rounded-full border border-[#5B3FD1]/20" />
                 <div className="absolute inset-8 rounded-full border border-[#18BFC7]/10" />
-
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="absolute w-[80%] h-[80%] bg-white/20 blur-[40px] rounded-full" />
                 </div>
-
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <svg
-                    viewBox="0 0 100 100"
-                    className="w-24 h-24 relative z-10 drop-shadow-2xl"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
+                  <svg viewBox="0 0 100 100" className="w-24 h-24 relative z-10 drop-shadow-2xl" xmlns="http://www.w3.org/2000/svg">
                     <defs>
                       <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
                         <stop offset="0%" stopColor="#5B3FD1" />
                         <stop offset="100%" stopColor="#18BFC7" />
                       </linearGradient>
                     </defs>
-
-                    <path
-                      d="M 15 20 L 60 20 C 65 20 68 23 68 28 L 68 55 C 68 60 65 63 60 63 L 30 63 L 22 72 L 22 63 C 17 63 15 60 15 55 L 15 28 C 15 23 17 20 15 20 Z"
-                      fill="none"
-                      stroke="url(#logoGrad)"
-                      strokeWidth="4"
-                      strokeLinejoin="round"
-                    />
+                    <path d="M 15 20 L 60 20 C 65 20 68 23 68 28 L 68 55 C 68 60 65 63 60 63 L 30 63 L 22 72 L 22 63 C 17 63 15 60 15 55 L 15 28 C 15 23 17 20 15 20 Z" fill="none" stroke="url(#logoGrad)" strokeWidth="4" strokeLinejoin="round" />
                     <path d="M 22 63 L 30 63 L 22 72 Z" fill="url(#logoGrad)" />
-
                     <circle cx="30" cy="38" r="5" fill="none" stroke="#18BFC7" strokeWidth="10" strokeDasharray="12 31.4" />
                     <circle cx="30" cy="38" r="5" fill="none" stroke="#FFB800" strokeWidth="10" strokeDasharray="10 31.4" strokeDashoffset="-12" />
                     <circle cx="30" cy="38" r="5" fill="none" stroke="#5B3FD1" strokeWidth="10" strokeDasharray="9.4 31.4" strokeDashoffset="-22" />
-
                     <rect x="42" y="32" width="18" height="3" rx="1.5" fill="#5B3FD1" />
                     <rect x="42" y="38" width="13" height="3" rx="1.5" fill="#5B3FD1" />
                     <rect x="42" y="44" width="15" height="3" rx="1.5" fill="#5B3FD1" />
-
                     <rect x="62" y="45" width="22" height="38" rx="4" fill="white" stroke="url(#logoGrad)" strokeWidth="3" />
                     <rect x="66" y="52" width="14" height="26" rx="2" fill="#F0F4F8" />
-
                     <circle cx="70" cy="58" r="2.5" fill="#00E676" />
                     <circle cx="70" cy="65" r="2.5" fill="#5B3FD1" />
                     <circle cx="70" cy="72" r="2.5" fill="#FFB800" />
@@ -1206,12 +1664,7 @@ export const SlideViewer: React.FC<{ slide: Slide }> = ({ slide }) => {
               {(slide.options || []).map((opt, idx) => {
                 const isCorrect = idx === slide.correctAnswer;
                 return (
-                  <div
-                    key={idx}
-                    className={`flex items-center gap-3 p-3 rounded-lg border ${
-                      isCorrect ? "border-green-500/30 bg-green-500/10" : "border-white/10 bg-white/5"
-                    }`}
-                  >
+                  <div key={idx} className={`flex items-center gap-3 p-3 rounded-lg border ${isCorrect ? "border-green-500/30 bg-green-500/10" : "border-white/10 bg-white/5"}`}>
                     <span className="font-bold text-white/30 w-6">{String.fromCharCode(65 + idx)}</span>
                     <span className="flex-1">{opt || `Опция ${idx + 1}`}</span>
                     {isCorrect && <span className="text-green-400">✅</span>}
