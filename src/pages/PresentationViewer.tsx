@@ -376,7 +376,8 @@ export const PresentationViewer: React.FC = () => {
       </div>
 
       {/* Top bar */}
-      <div className="absolute top-4 left-4 right-4 z-20 flex items-center justify-between pointer-events-none">
+      {/* Top bar */}
+<div className="absolute top-4 left-4 right-4 z-40 flex items-center justify-between pointer-events-none">
         <div className="pointer-events-auto inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10">
           {status === "online" ? (
             <>

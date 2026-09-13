@@ -1,5 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import QRCode from "react-qr-code";
+import React, { useState, useCallback, useRef, useEffect} from "react";
 import {
   Plus,
   Trash2,
@@ -264,44 +263,6 @@ const PinLock: React.FC<{ onUnlock: () => void }> = ({ onUnlock }) => {
   );
 };
 
-// ─── QR Code Slide ────────────────────────────────────────────────
-
-const QRCodeSlide: React.FC<{ sessionId: string }> = ({ sessionId }) => {
-  const joinUrl = useMemo(
-    () => `${window.location.origin}/view?session=${sessionId}`,
-    [sessionId]
-    
-  );
-console.log("QRCodeSlide:", QRCodeSlide)
-  return (
-    <div className="flex flex-col items-center justify-center h-full w-full text-center">
-      <h2 className="text-3xl md:text-4xl font-bold text-white mb-6">
-        📱 Сканирайте QR кода
-      </h2>
-      <div className="bg-white p-4 rounded-xl shadow-2xl">
-        <QRCode
-          value={joinUrl}
-          size={256}
-          style={{ height: "256px", width: "256px" }}
-          bgColor="#ffffff"
-          fgColor="#0A162B"
-        />
-      </div>
-      <p className="mt-6 text-white/60 text-sm max-w-md">
-        или отворете този линк на друго устройство:
-      </p>
-      <div className="mt-2 flex items-center gap-2 bg-black/30 px-4 py-2 rounded-lg border border-white/10">
-        <span className="text-sm text-[#4cc9ff] break-all">{joinUrl}</span>
-        <button
-          onClick={() => navigator.clipboard.writeText(joinUrl)}
-          className="text-xs text-white/40 hover:text-white/70"
-        >
-          📋 Копирай
-        </button>
-      </div>
-    </div>
-  );
-};
 
 // ─── Slide Thumbnail ──────────────────────────────────────────────
 
