@@ -8,11 +8,9 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  X,
   FileJson,
   Upload,
   Play,
-  Link as LinkIcon,
   Layout,
   Image as ImageIcon,
   Video,
@@ -107,17 +105,9 @@ const SLIDE_META: Record<SlideType, { icon: React.ReactNode; label: string; colo
   crypto:    { icon: <Lock className="w-4 h-4" />,       label: "Криптиране",   color: "from-[#FF8A00] to-[#FF4B4B]" },
 };
 
-const getSlideIcon = (type: string): string => {
-  const map: Record<string, string> = {
-    title: "📄", content: "📝", image: "🖼️", video: "🎬",
-    quiz: "🧠", poll: "📊", crypto: "🔐",
-  };
-  return map[type] || "📄";
-};
 
-const getSlideLabel = (type: string): string => {
-  return (SLIDE_META as any)[type]?.label || type;
-};
+
+
 
 // ─── Default Presentation ────────────────────────────────────────
 
@@ -280,8 +270,9 @@ const QRCodeSlide: React.FC<{ sessionId: string }> = ({ sessionId }) => {
   const joinUrl = useMemo(
     () => `${window.location.origin}/view?session=${sessionId}`,
     [sessionId]
+    
   );
-
+console.log("QRCodeSlide:", QRCodeSlide)
   return (
     <div className="flex flex-col items-center justify-center h-full w-full text-center">
       <h2 className="text-3xl md:text-4xl font-bold text-white mb-6">
