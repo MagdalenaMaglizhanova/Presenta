@@ -317,7 +317,7 @@ const PinLock: React.FC<{ onUnlock: () => void }> = ({ onUnlock }) => {
         </div>
 
         <p className="text-center text-white/30 text-[11px] mt-6">
-          Само учителят има достъп до редактора. Учениците влизат чрез QR код.
+          Само учителят има достъп до редактора. Учениците влизат с код за достъп.
         </p>
       </div>
 
@@ -576,13 +576,11 @@ export const PresentationEditor: React.FC = () => {
   useEffect(() => {
     if (!unlocked) return;
     
-    // Първоначален mount – не маркираме като unsaved
     if (isFirstMountRef.current) {
       isFirstMountRef.current = false;
       return;
     }
 
-    // Skip ако сме заредили/създали нова презентация
     if (skipNextUnsavedRef.current) {
       skipNextUnsavedRef.current = false;
       return;
@@ -921,7 +919,7 @@ export const PresentationEditor: React.FC = () => {
     input.click();
   }, []);
 
-  // ─── Keyboard shortcut: Ctrl+S за запазване ───────────────────
+  // ─── Keyboard shortcut: Ctrl+S ────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
@@ -1226,7 +1224,7 @@ export const PresentationEditor: React.FC = () => {
                     Никой още не се е свързал
                   </p>
                   <p className="text-[10px] text-white/20 mt-0.5">
-                    Сподели QR кода за да влязат
+                    Сподели кода за достъп
                   </p>
                 </div>
               ) : (

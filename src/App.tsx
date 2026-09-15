@@ -21,12 +21,15 @@ import PresentationViewer from './pages/PresentationViewer'
 // Компонент за гледане САМО от ученици (минимален)
 import StudentViewer from './pages/StudentViewer'
 
+// 🆕 Join страница – учениците влизат с код
+import JoinPage from './pages/JoinPage'
+
 // ─── Layout wrapper, който скрива Header/Footer на fullscreen страниците ───
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation()
 
   // Страници, на които НЕ искаме Header и Footer
-  const fullscreenRoutes = ['/create', '/view', '/present']
+  const fullscreenRoutes = ['/create', '/view', '/present', '/join']
   const isFullscreen = fullscreenRoutes.some((route) =>
     location.pathname.startsWith(route)
   )
@@ -72,6 +75,10 @@ const App: React.FC = () => {
           {/* ─── Гледане на живо от УЧЕНИЦИТЕ (минимален) ─── */}
           {/* Това е route-ът, който се отваря след сканиране на QR кода */}
           <Route path="/view" element={<StudentViewer />} />
+
+          {/* 🆕 Join страница – учениците влизат с 6-цифрен код */}
+          {/* URL: presenta-rose.vercel.app/join */}
+          <Route path="/join" element={<JoinPage />} />
 
           {/* ─── 404 fallback (по избор) ─── */}
           <Route

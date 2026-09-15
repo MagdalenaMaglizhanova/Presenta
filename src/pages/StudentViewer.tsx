@@ -2,12 +2,12 @@
 // Минимален компонент САМО за ученици – само гледат слайда.
 // 1. Въвеждат име + избират аватар (Kahoot стил)
 // 2. Виждат countdown 3, 2, 1, START!
-// 3. Гледат презентацията + реагират с emoji
+// 3. Гледат презентацията + реагират с emoji + отговарят на quiz/poll
 
 import React, { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { WifiOff, User, ArrowRight, Sparkles } from "lucide-react";
+import { WifiOff, User, ArrowRight, Sparkles, Check, X, HelpCircle, BarChart3 } from "lucide-react";
 import { SlideViewer } from "./PresentationEditor";
 
 // ═══════════════════════════════════════════════════════════════════
@@ -15,7 +15,7 @@ import { SlideViewer } from "./PresentationEditor";
 // ═══════════════════════════════════════════════════════════════════
 const WS_URL = import.meta.env.VITE_WS_URL || "wss://server-presenta.onrender.com";
 
-// ─── Аватари (emoji, за да няма нужда от файлове) ─────────────
+// ─── Аватари ────────────────────────────────────────────────────
 const AVATARS = [
   "🦊", "🐼", "🐯", "🦁",
   "🐸", "🐙", "🦄", "🐲",
@@ -28,10 +28,17 @@ const REACTION_EMOJIS = ["❤️", "👍", "😂", "😮", "🔥", "👏", "💡
 // Ключове за sessionStorage
 const getNameKey = (sessionId: string) => `presenta_student_name_${sessionId}`;
 const getAvatarKey = (sessionId: string) => `presenta_student_avatar_${sessionId}`;
+const getAnswersKey = (sessionId: string) => `presenta_student_answers_${sessionId}`;
 
 type Phase = "name" | "countdown" | "live";
 
-// ─── Floating emoji за реакции ─────────────────────────────────
+// ─── Тип за отговор ─────────────────────────────────────────────
+interface AnswerState {
+  answerIndex: number;
+  isCorrect?: boolean | null;
+}
+
+// ─── Floating emoji ─────────────────────────────────────────────
 interface FloatingEmoji {
   id: number;
   emoji: string;
@@ -63,6 +70,199 @@ const FloatingEmojiItem: React.FC<{ item: FloatingEmoji; onDone: () => void }> =
   );
 };
 
+// ═══════════════════════════════════════════════════════════════
+// 📝 INTERACTIVE QUIZ/POLL SLIDE
+// ═══════════════════════════════════════════════════════════════
+
+const InteractiveSlide: React.FC<{
+  slide: any;
+  slideIndex: number;
+  answer?: AnswerState;
+  onAnswer: (optionIndex: number) => void;
+}> = ({ slide, answer, onAnswer }) => {
+  const isQuiz = slide.type === "quiz";
+  const isPoll = slide.type === "poll";
+  const options: string[] = slide.options || [];
+  const correctAnswer = slide.correctAnswer;
+  const hasAnswered = !!answer;
+
+  if (!isQuiz && !isPoll) return null;
+
+  return (
+    <div className="h-full flex flex-col">
+      {/* Header */}
+      <div className="shrink-0 mb-4 sm:mb-6">
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 mb-3">
+          {isQuiz ? (
+            <>
+              <HelpCircle className="w-3.5 h-3.5 text-[#00E676]" />
+              <span className="text-[10px] uppercase tracking-widest text-[#00E676] font-bold">
+                Тест
+              </span>
+            </>
+          ) : (
+            <>
+              <BarChart3 className="w-3.5 h-3.5 text-[#B47CFF]" />
+              <span className="text-[10px] uppercase tracking-widest text-[#B47CFF] font-bold">
+                Анкета
+              </span>
+            </>
+          )}
+        </div>
+
+        <h2 className="text-2xl sm:text-3xl font-bold text-white leading-tight">
+          {slide.title || (isQuiz ? "Тест" : "Анкета")}
+        </h2>
+
+        {slide.question && (
+          <p className="text-lg sm:text-xl font-semibold mt-3 text-white/90">
+            {slide.question}
+          </p>
+        )}
+      </div>
+
+      {/* Options */}
+      <div className="flex-1 flex flex-col gap-2.5 sm:gap-3 overflow-y-auto">
+        {options.map((opt, idx) => {
+          const letter = String.fromCharCode(65 + idx);
+          const isSelected = answer?.answerIndex === idx;
+          const isCorrectOption = isQuiz && idx === correctAnswer;
+          const showFeedback = hasAnswered && isQuiz;
+          
+          // Определяне на цвета
+          let bgClass = "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/30";
+          let textClass = "text-white/90";
+          let letterBg = "bg-white/10 text-white/60";
+
+          if (showFeedback) {
+            if (isCorrectOption) {
+              bgClass = "bg-green-500/20 border-green-500/50";
+              textClass = "text-white";
+              letterBg = "bg-green-500 text-white";
+            } else if (isSelected) {
+              bgClass = "bg-red-500/20 border-red-500/50";
+              textClass = "text-white";
+              letterBg = "bg-red-500 text-white";
+            } else {
+              bgClass = "bg-white/5 border-white/5 opacity-50";
+              letterBg = "bg-white/5 text-white/30";
+            }
+          } else if (hasAnswered && isPoll) {
+            // За poll - само маркирай избрания
+            if (isSelected) {
+              bgClass = "bg-[#5B3FD1]/30 border-[#7C5CE7]/60";
+              letterBg = "bg-gradient-to-br from-[#5B3FD1] to-[#18BFC7] text-white";
+              textClass = "text-white";
+            } else {
+              bgClass = "bg-white/5 border-white/5 opacity-40";
+              letterBg = "bg-white/5 text-white/30";
+            }
+          }
+
+          return (
+            <motion.button
+              key={idx}
+              onClick={() => !hasAnswered && onAnswer(idx)}
+              disabled={hasAnswered}
+              whileTap={!hasAnswered ? { scale: 0.98 } : {}}
+              whileHover={!hasAnswered ? { scale: 1.01 } : {}}
+              className={`relative w-full flex items-center gap-3 sm:gap-4 p-4 sm:p-5 rounded-2xl border-2 transition-all text-left ${bgClass} ${
+                !hasAnswered ? "cursor-pointer" : "cursor-default"
+              }`}
+            >
+              {/* Letter badge */}
+              <div
+                className={`shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center font-bold text-base sm:text-lg ${letterBg} transition-colors`}
+              >
+                {letter}
+              </div>
+
+              {/* Option text */}
+              <span className={`flex-1 text-sm sm:text-base font-medium ${textClass}`}>
+                {opt || `Опция ${idx + 1}`}
+              </span>
+
+              {/* Feedback icon */}
+              {showFeedback && isCorrectOption && (
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                  className="shrink-0 w-8 h-8 rounded-full bg-green-500 flex items-center justify-center"
+                >
+                  <Check className="w-5 h-5 text-white" strokeWidth={3} />
+                </motion.div>
+              )}
+              {showFeedback && isSelected && !isCorrectOption && (
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                  className="shrink-0 w-8 h-8 rounded-full bg-red-500 flex items-center justify-center"
+                >
+                  <X className="w-5 h-5 text-white" strokeWidth={3} />
+                </motion.div>
+              )}
+            </motion.button>
+          );
+        })}
+      </div>
+
+      {/* Feedback banner */}
+      <AnimatePresence>
+        {hasAnswered && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="shrink-0 mt-4"
+          >
+            {isQuiz ? (
+              answer?.isCorrect ? (
+                <div className="flex items-center gap-3 px-5 py-3.5 rounded-2xl bg-green-500/20 border border-green-500/40">
+                  <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center shrink-0">
+                    <Check className="w-6 h-6 text-white" strokeWidth={3} />
+                  </div>
+                  <div>
+                    <p className="text-base font-bold text-green-300">Правилен отговор! 🎉</p>
+                    <p className="text-xs text-green-200/70">Браво!</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 px-5 py-3.5 rounded-2xl bg-red-500/20 border border-red-500/40">
+                  <div className="w-10 h-10 rounded-full bg-red-500 flex items-center justify-center shrink-0">
+                    <X className="w-6 h-6 text-white" strokeWidth={3} />
+                  </div>
+                  <div>
+                    <p className="text-base font-bold text-red-300">Грешен отговор</p>
+                    <p className="text-xs text-red-200/70">
+                      Правилният отговор е <strong>{String.fromCharCode(65 + (correctAnswer ?? 0))}</strong>
+                    </p>
+                  </div>
+                </div>
+              )
+            ) : (
+              <div className="flex items-center gap-3 px-5 py-3.5 rounded-2xl bg-[#5B3FD1]/20 border border-[#5B3FD1]/40">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#5B3FD1] to-[#18BFC7] flex items-center justify-center shrink-0">
+                  <Check className="w-6 h-6 text-white" strokeWidth={3} />
+                </div>
+                <div>
+                  <p className="text-base font-bold text-[#A78BFA]">Отговорът е записан! ✅</p>
+                  <p className="text-xs text-white/60">Благодарим за мнението!</p>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════
+// 🎯 MAIN COMPONENT
+// ═══════════════════════════════════════════════════════════════
+
 export const StudentViewer: React.FC = () => {
   const [searchParams] = useSearchParams();
   const sessionId = searchParams.get("session");
@@ -81,10 +281,14 @@ export const StudentViewer: React.FC = () => {
   const [direction, setDirection] = useState<1 | -1>(1);
   const [status, setStatus] = useState<"connecting" | "online" | "offline">("connecting");
 
-  // 🔥 Floating reactions (визуален feedback при натискане)
+  // 🔥 Отговори на quiz/poll
+  // { [slideIndex]: { answerIndex, isCorrect } }
+  const [answers, setAnswers] = useState<Record<number, AnswerState>>({});
+  const answersRef = useRef<Record<number, AnswerState>>({});
+
+  // 🔥 Floating reactions
   const [floatingEmojis, setFloatingEmojis] = useState<FloatingEmoji[]>([]);
   const floatingIdRef = useRef(0);
-  // Cooldown per emoji за да не спами
   const lastSentRef = useRef<Record<string, number>>({});
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -110,19 +314,37 @@ export const StudentViewer: React.FC = () => {
     avatarRef.current = studentAvatar;
   }, [studentAvatar]);
 
+  useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
+
   // 🔥 Проверяваме sessionStorage при зареждане
   useEffect(() => {
     if (!sessionId) return;
     const savedName = sessionStorage.getItem(getNameKey(sessionId));
     const savedAvatar = sessionStorage.getItem(getAvatarKey(sessionId));
+    const savedAnswers = sessionStorage.getItem(getAnswersKey(sessionId));
 
     if (savedName && savedName.trim().length > 0) {
       setStudentName(savedName);
       if (savedAvatar) setStudentAvatar(savedAvatar);
+      if (savedAnswers) {
+        try {
+          setAnswers(JSON.parse(savedAnswers));
+        } catch {}
+      }
       setNameConfirmed(true);
       setPhase("live");
     }
   }, [sessionId]);
+
+  // 💾 Запазваме отговорите в sessionStorage при промяна
+  useEffect(() => {
+    if (!sessionId) return;
+    if (Object.keys(answers).length > 0) {
+      sessionStorage.setItem(getAnswersKey(sessionId), JSON.stringify(answers));
+    }
+  }, [answers, sessionId]);
 
   // ─── Потвърждаване на име ─────────────────────────────────────
   const handleConfirmName = () => {
@@ -145,7 +367,7 @@ export const StudentViewer: React.FC = () => {
     }
   };
 
-  // ─── WebSocket – свързваме се СЛЕД като има име ───────────────
+  // ─── WebSocket ─────────────────────────────────────────────────
   useEffect(() => {
     if (!sessionId || !nameConfirmed || !studentName) return;
 
@@ -242,17 +464,14 @@ export const StudentViewer: React.FC = () => {
 
   // ─── Изпращане на реакция ─────────────────────────────────────
   const sendReaction = (emoji: string) => {
-    // Cooldown 500ms за същия emoji (за да не спами)
     const now = Date.now();
     const lastSent = lastSentRef.current[emoji] || 0;
     if (now - lastSent < 500) return;
     lastSentRef.current[emoji] = now;
 
-    // Визуален feedback (floating emoji)
     const id = ++floatingIdRef.current;
     setFloatingEmojis((prev) => [...prev, { id, emoji }]);
 
-    // Изпращане към сървъра → всички го виждат
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(
         JSON.stringify({
@@ -267,6 +486,47 @@ export const StudentViewer: React.FC = () => {
     }
   };
 
+  // ─── Изпращане на отговор (quiz/poll) ────────────────────────
+  const sendAnswer = (optionIndex: number) => {
+    const slideIdx = currentIndexRef.current;
+    const slide = slidesRef.current[slideIdx];
+    if (!slide) return;
+
+    const isQuiz = slide.type === "quiz";
+    const isCorrect =
+      isQuiz && typeof slide.correctAnswer === "number"
+        ? optionIndex === slide.correctAnswer
+        : null;
+
+    // Записваме локално
+    const newAnswer: AnswerState = {
+      answerIndex: optionIndex,
+      isCorrect,
+    };
+
+    setAnswers((prev) => ({ ...prev, [slideIdx]: newAnswer }));
+
+    // Изпращаме към сървъра
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: "POLL_ANSWER",
+          slideIndex: slideIdx,
+          answerIndex: optionIndex,
+          answerText: slide.options?.[optionIndex] || "",
+          question: slide.question || "",
+          isCorrect,
+          slideType: slide.type,
+          name: nameRef.current,
+          avatar: avatarRef.current,
+          timestamp: Date.now(),
+        })
+      );
+    }
+
+    console.log(`📝 Отговор: слайд ${slideIdx}, опция ${optionIndex}, верен: ${isCorrect}`);
+  };
+
   // ═══════════════════════════════════════════════════════════════
   // 🔴 1. Липсва session ID
   // ═══════════════════════════════════════════════════════════════
@@ -279,8 +539,8 @@ export const StudentViewer: React.FC = () => {
           </div>
           <p className="text-xl font-bold text-white mb-2">Липсва код на сесията</p>
           <p className="text-white/50 text-sm">
-            Сканирайте QR кода от екрана на учителя.
-          </p>
+  Върнете се на <strong className="text-[#4cc9ff]">/join</strong> и въведете кода от екрана на учителя.
+</p>
         </div>
       </div>
     );
@@ -315,7 +575,6 @@ export const StudentViewer: React.FC = () => {
           </div>
 
           <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl">
-            {/* Avatar picker */}
             <div className="flex flex-col items-center mb-6">
               <h2 className="text-lg font-bold text-white mb-1">Избери си аватар</h2>
               <p className="text-xs text-white/40 mb-4">Ще се вижда до името ти</p>
@@ -405,7 +664,7 @@ export const StudentViewer: React.FC = () => {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // 🎬 3. COUNTDOWN: 3 → 2 → 1 → START!
+  // 🎬 3. COUNTDOWN
   // ═══════════════════════════════════════════════════════════════
   if (phase === "countdown") {
     return (
@@ -481,10 +740,13 @@ export const StudentViewer: React.FC = () => {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // ✅ 6. Показваме слайда + Reaction bar
+  // ✅ 6. Показваме слайда
   // ═══════════════════════════════════════════════════════════════
   const currentSlide = slides[currentIndex] || slides[0];
   const progress = ((currentIndex + 1) / slides.length) * 100;
+  const isInteractive =
+    currentSlide &&
+    (currentSlide.type === "quiz" || currentSlide.type === "poll");
 
   return (
     <div className="min-h-screen bg-[#0A162B] flex flex-col overflow-hidden relative">
@@ -537,7 +799,16 @@ export const StudentViewer: React.FC = () => {
                 transition={{ duration: 0.4, ease: "easeOut" }}
                 className="absolute inset-0 p-6 sm:p-10 md:p-12 overflow-y-auto"
               >
-                <SlideViewer slide={currentSlide} />
+                {isInteractive ? (
+                  <InteractiveSlide
+                    slide={currentSlide}
+                    slideIndex={currentIndex}
+                    answer={answers[currentIndex]}
+                    onAnswer={sendAnswer}
+                  />
+                ) : (
+                  <SlideViewer slide={currentSlide} />
+                )}
               </motion.div>
             </AnimatePresence>
           </div>
@@ -552,12 +823,10 @@ export const StudentViewer: React.FC = () => {
         className="fixed bottom-0 left-0 right-0 z-40 px-3 pb-3 pt-6 bg-gradient-to-t from-[#0A162B] via-[#0A162B]/95 to-transparent"
       >
         <div className="max-w-3xl mx-auto">
-          {/* Етикет */}
           <p className="text-center text-[10px] uppercase tracking-widest text-white/30 font-bold mb-2">
             Реагирай на слайда
           </p>
 
-          {/* Emoji бутони */}
           <div className="flex items-center justify-center gap-2 sm:gap-2.5 flex-wrap">
             {REACTION_EMOJIS.map((emoji, idx) => (
               <motion.button
@@ -587,7 +856,7 @@ export const StudentViewer: React.FC = () => {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// 🎬 COUNTDOWN COMPONENT: 3 → 2 → 1 → START!
+// 🎬 COUNTDOWN COMPONENT
 // ═══════════════════════════════════════════════════════════════
 
 const CountdownScreen: React.FC<{

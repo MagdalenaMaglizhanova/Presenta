@@ -1,6 +1,6 @@
 // src/components/PresentationViewer.tsx
 // Компонент за презентиране от УЧИТЕЛЯ.
-// Показва QR код, слайдове, ученици и реакции в реално време.
+// Показва Join слайд (URL + код), слайдове, ученици, реакции, live quiz резултати и Results слайд.
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -22,6 +22,14 @@ import {
   Clock,
   Heart,
   LogOut,
+  HelpCircle,
+  BarChart3,
+  Check,
+  X,
+  TrendingUp,
+  Trophy,
+  Award,
+  Globe,
 } from "lucide-react";
 import { SlideViewer } from "./PresentationEditor";
 
@@ -46,39 +54,132 @@ interface ReactionBurst {
   avatar?: string;
 }
 
-// ─── QR Code Slide (вграден) ──────────────────────────────────────
-const QRCodeSlide: React.FC<{ sessionId: string }> = ({ sessionId }) => {
-  const joinUrl = useMemo(
+interface AnswerData {
+  optionIndex: number;
+  answerText: string;
+  isCorrect: boolean | null;
+  name: string;
+  avatar?: string;
+  timestamp: number;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 🎯 JOIN SLIDE (заменя QRCodeSlide)
+// Показва URL + код с анимирани букви + малък QR код
+// ═══════════════════════════════════════════════════════════════
+
+const JoinSlide: React.FC<{ sessionId: string }> = ({ sessionId }) => {
+  const joinUrl = useMemo(() => `${window.location.origin}/join`, []);
+  const viewUrl = useMemo(
     () => `${window.location.origin}/view?session=${sessionId}`,
     [sessionId]
   );
 
+  // Показваме URL без протокол и без trailing slash
+  const displayUrl = useMemo(() => {
+    return joinUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  }, [joinUrl]);
+
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyUrl = () => {
+    navigator.clipboard.writeText(joinUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
-    <div className="flex flex-col items-center justify-center h-full w-full text-center">
-      <h2 className="text-3xl md:text-4xl font-bold text-white mb-6">
-        📱 Сканирайте QR кода
-      </h2>
-      <div className="bg-white p-4 rounded-xl shadow-2xl">
-        <QRCode
-          value={joinUrl}
-          size={256}
-          style={{ height: "256px", width: "256px" }}
-          bgColor="#ffffff"
-          fgColor="#0A162B"
-        />
+    <div className="flex flex-col items-center justify-center h-full w-full text-center px-4 py-6 overflow-y-auto">
+      {/* Заглавие */}
+      <motion.h2
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="text-2xl md:text-4xl font-bold text-white mb-2"
+      >
+        Включи се в презентацията
+      </motion.h2>
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.5, delay: 0.1 }}
+        className="text-white/50 text-sm md:text-base mb-6 md:mb-8"
+      >
+        Отвори линка в браузъра и въведи кода
+      </motion.p>
+
+      {/* URL на сайта */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5, delay: 0.2 }}
+        className="mb-6 md:mb-8 w-full max-w-2xl"
+      >
+        <p className="text-[10px] uppercase tracking-widest text-white/30 font-bold mb-2 flex items-center justify-center gap-1.5">
+          <Globe className="w-3 h-3" />
+          Адрес на сайта
+        </p>
+        <div className="inline-flex items-center gap-2 px-4 md:px-6 py-3 md:py-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
+          <span className="text-lg md:text-2xl font-bold text-[#4cc9ff] break-all">
+            {displayUrl}
+          </span>
+          <button
+            onClick={handleCopyUrl}
+            className="text-sm text-white/40 hover:text-white/80 shrink-0 p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+            title="Копирай линка"
+          >
+            {copied ? "✅" : "📋"}
+          </button>
+        </div>
+      </motion.div>
+
+      {/* Код на сесията */}
+      <div className="mb-6 md:mb-8">
+        <p className="text-[10px] uppercase tracking-widest text-white/30 font-bold mb-3">
+          Код на сесията
+        </p>
+        <div className="flex items-center justify-center gap-2 md:gap-3 flex-wrap">
+          {sessionId.split("").map((char, i) => (
+            <motion.div
+              key={i}
+              initial={{ scale: 0, opacity: 0, y: 30, rotateX: -90 }}
+              animate={{ scale: 1, opacity: 1, y: 0, rotateX: 0 }}
+              transition={{
+                delay: 0.3 + i * 0.08,
+                type: "spring",
+                stiffness: 300,
+                damping: 20,
+              }}
+              className="w-12 h-14 sm:w-16 sm:h-20 md:w-20 md:h-24 rounded-2xl bg-gradient-to-br from-[#5B3FD1] to-[#7C5CE7] border-2 border-[#7C5CE7]/50 flex items-center justify-center shadow-2xl shadow-[#5B3FD1]/40"
+            >
+              <span className="text-2xl sm:text-4xl md:text-5xl font-black text-white">
+                {char}
+              </span>
+            </motion.div>
+          ))}
+        </div>
       </div>
-      <p className="mt-6 text-white/60 text-sm max-w-md">
-        или отворете този линк на друго устройство:
-      </p>
-      <div className="mt-2 flex items-center gap-2 bg-black/30 px-4 py-2 rounded-lg border border-white/10">
-        <span className="text-sm text-[#4cc9ff] break-all">{joinUrl}</span>
-        <button
-          onClick={() => navigator.clipboard.writeText(joinUrl)}
-          className="text-xs text-white/40 hover:text-white/70 shrink-0"
-        >
-          📋 Копирай
-        </button>
-      </div>
+
+      {/* QR код (малък, за телефони) */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.8 }}
+        className="flex flex-col items-center gap-3"
+      >
+        <p className="text-[10px] uppercase tracking-widest text-white/30 font-bold">
+          или сканирай с телефон
+        </p>
+        <div className="bg-white p-3 rounded-xl shadow-2xl">
+          <QRCode
+            value={viewUrl}
+            size={130}
+            style={{ height: "130px", width: "130px" }}
+            bgColor="#ffffff"
+            fgColor="#0A162B"
+          />
+        </div>
+      </motion.div>
     </div>
   );
 };
@@ -115,6 +216,546 @@ const FloatingReaction: React.FC<{ reaction: ReactionBurst; onDone: () => void }
   );
 };
 
+// ═══════════════════════════════════════════════════════════════
+// 🥧 DONUT CHART (SVG)
+// ═══════════════════════════════════════════════════════════════
+
+const DonutChart: React.FC<{
+  value: number;
+  label: string;
+  sublabel?: string;
+  color: string;
+  bgColor?: string;
+  size?: number;
+}> = ({ value, label, sublabel, color, bgColor = "rgba(255,255,255,0.08)", size = 180 }) => {
+  const radius = 45;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (value / 100) * circumference;
+
+  return (
+    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg
+        viewBox="0 0 100 100"
+        className="transform -rotate-90"
+        style={{ width: size, height: size }}
+      >
+        <circle
+          cx="50"
+          cy="50"
+          r={radius}
+          fill="none"
+          stroke={bgColor}
+          strokeWidth="10"
+        />
+        <motion.circle
+          cx="50"
+          cy="50"
+          r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth="10"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          initial={{ strokeDashoffset: circumference }}
+          animate={{ strokeDashoffset: offset }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-3xl sm:text-4xl font-black text-white leading-none">
+          {Math.round(value)}%
+        </span>
+        {label && (
+          <span className="text-[10px] uppercase tracking-widest text-white/50 font-bold mt-1.5">
+            {label}
+          </span>
+        )}
+        {sublabel && (
+          <span className="text-[10px] text-white/30 mt-0.5">
+            {sublabel}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════
+// 📊 LIVE QUIZ/POLL RESULTS (по време на гласуване)
+// ═══════════════════════════════════════════════════════════════
+
+const LiveResults: React.FC<{
+  slide: any;
+  slideIndex: number;
+  answers: AnswerData[];
+}> = ({ slide, answers }) => {
+  const isQuiz = slide.type === "quiz";
+  const options: string[] = slide.options || [];
+  const correctAnswer = slide.correctAnswer;
+
+  const counts: number[] = options.map(
+    (_, idx) => answers.filter((a) => a.optionIndex === idx).length
+  );
+  const total = answers.length;
+  const maxCount = Math.max(...counts, 1);
+  const uniqueResponders = new Set(answers.map((a) => a.name)).size;
+  const correctCount = isQuiz ? answers.filter((a) => a.isCorrect === true).length : 0;
+  const correctPercent = total > 0 ? Math.round((correctCount / total) * 100) : 0;
+
+  const BAR_COLORS = [
+    "from-[#5B3FD1] to-[#7C5CE7]",
+    "from-[#18BFC7] to-[#4cc9ff]",
+    "from-[#FFB800] to-[#FF8A00]",
+    "from-[#FF4B4B] to-[#FF6B6B]",
+    "from-[#00E676] to-[#00BFA5]",
+    "from-[#B47CFF] to-[#7C5CE7]",
+  ];
+
+  return (
+    <div className="h-full flex flex-col">
+      <div className="shrink-0 mb-4 sm:mb-6">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
+            {isQuiz ? (
+              <>
+                <HelpCircle className="w-3.5 h-3.5 text-[#00E676]" />
+                <span className="text-[10px] uppercase tracking-widest text-[#00E676] font-bold">
+                  Тест
+                </span>
+              </>
+            ) : (
+              <>
+                <BarChart3 className="w-3.5 h-3.5 text-[#B47CFF]" />
+                <span className="text-[10px] uppercase tracking-widest text-[#B47CFF] font-bold">
+                  Анкета
+                </span>
+              </>
+            )}
+          </div>
+
+          <motion.div
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-green-500/20 to-green-600/20 border border-green-500/40"
+          >
+            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+            <span className="text-[10px] uppercase tracking-widest text-green-300 font-bold">
+              LIVE
+            </span>
+          </motion.div>
+
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
+            <Users className="w-3.5 h-3.5 text-[#4cc9ff]" />
+            <span className="text-xs text-white/80 font-bold">
+              {uniqueResponders} отговорили
+            </span>
+          </div>
+
+          {isQuiz && total > 0 && (
+            <motion.div
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border ${
+                correctPercent >= 70
+                  ? "bg-green-500/20 border-green-500/40"
+                  : correctPercent >= 40
+                  ? "bg-yellow-500/20 border-yellow-500/40"
+                  : "bg-red-500/20 border-red-500/40"
+              }`}
+            >
+              <TrendingUp
+                className={`w-3.5 h-3.5 ${
+                  correctPercent >= 70
+                    ? "text-green-400"
+                    : correctPercent >= 40
+                    ? "text-yellow-400"
+                    : "text-red-400"
+                }`}
+              />
+              <span
+                className={`text-xs font-bold ${
+                  correctPercent >= 70
+                    ? "text-green-300"
+                    : correctPercent >= 40
+                    ? "text-yellow-300"
+                    : "text-red-300"
+                }`}
+              >
+                {correctPercent}% верни
+              </span>
+            </motion.div>
+          )}
+        </div>
+
+        <h2 className="text-2xl sm:text-3xl font-bold text-white leading-tight mt-4">
+          {slide.title || (isQuiz ? "Тест" : "Анкета")}
+        </h2>
+
+        {slide.question && (
+          <p className="text-lg sm:text-xl font-semibold mt-3 text-white/90">
+            {slide.question}
+          </p>
+        )}
+      </div>
+
+      <div className="flex-1 flex flex-col gap-3 overflow-y-auto">
+        {options.map((opt, idx) => {
+          const letter = String.fromCharCode(65 + idx);
+          const count = counts[idx] || 0;
+          const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
+          const barWidth = total > 0 ? (count / maxCount) * 100 : 0;
+          const isCorrectOption = isQuiz && idx === correctAnswer;
+          const colorClass = BAR_COLORS[idx % BAR_COLORS.length];
+
+          const voters = answers
+            .filter((a) => a.optionIndex === idx)
+            .map((a) => ({ name: a.name, avatar: a.avatar }));
+
+          return (
+            <div
+              key={idx}
+              className={`relative rounded-2xl border-2 overflow-hidden transition-all ${
+                isCorrectOption
+                  ? "border-green-500/60 bg-green-500/10"
+                  : "border-white/10 bg-white/5"
+              }`}
+            >
+              {total > 0 && (
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${barWidth}%` }}
+                  transition={{ duration: 0.5, ease: "easeOut" }}
+                  className={`absolute inset-y-0 left-0 bg-gradient-to-r ${colorClass} opacity-25`}
+                />
+              )}
+
+              <div className="relative p-4 sm:p-5">
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <div
+                    className={`shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center font-bold text-base sm:text-lg ${
+                      isCorrectOption && total > 0
+                        ? "bg-green-500 text-white"
+                        : "bg-white/10 text-white/60"
+                    }`}
+                  >
+                    {letter}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm sm:text-base font-semibold text-white">
+                        {opt || `Опция ${idx + 1}`}
+                      </span>
+                      {isCorrectOption && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-500/30 border border-green-500/50">
+                          <Check className="w-3 h-3 text-green-300" />
+                          <span className="text-[10px] text-green-300 font-bold uppercase">
+                            Верен
+                          </span>
+                        </span>
+                      )}
+                    </div>
+
+                    {voters.length > 0 && (
+                      <div className="flex items-center gap-1 mt-2 flex-wrap">
+                        {voters.slice(0, 8).map((v, vi) => (
+                          <div
+                            key={vi}
+                            className="w-6 h-6 rounded-full bg-gradient-to-br from-[#5B3FD1] to-[#18BFC7] flex items-center justify-center text-[10px] border border-white/20"
+                            title={v.name}
+                          >
+                            {v.avatar || v.name.charAt(0).toUpperCase()}
+                          </div>
+                        ))}
+                        {voters.length > 8 && (
+                          <span className="text-[10px] text-white/50 font-medium ml-1">
+                            +{voters.length - 8}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="shrink-0 text-right">
+                    <div className="flex items-baseline gap-1.5 justify-end">
+                      <motion.span
+                        key={count}
+                        initial={{ scale: 1.3, color: "#00E676" }}
+                        animate={{ scale: 1, color: "#ffffff" }}
+                        transition={{ duration: 0.3 }}
+                        className="text-2xl sm:text-3xl font-black"
+                      >
+                        {count}
+                      </motion.span>
+                      <span className="text-sm text-white/50 font-medium">
+                        {total > 0 ? `${percentage}%` : "0%"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        {total === 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex flex-col items-center justify-center py-8 text-center"
+          >
+            <div className="w-14 h-14 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-3">
+              <Loader2 className="w-6 h-6 text-white/40 animate-spin" />
+            </div>
+            <p className="text-sm text-white/50 font-medium">
+              Чакаме първите отговори...
+            </p>
+          </motion.div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════
+// 🏆 RESULTS SLIDE (обобщен слайд след quiz/poll)
+// ═══════════════════════════════════════════════════════════════
+
+const ResultsSlide: React.FC<{
+  slide: any;
+  answers: AnswerData[];
+  totalStudents: number;
+}> = ({ slide, answers, totalStudents }) => {
+  const isQuiz = slide.type === "quiz";
+
+  const total = answers.length;
+  const uniqueResponders = new Set(answers.map((a) => a.name)).size;
+  const correctCount = isQuiz ? answers.filter((a) => a.isCorrect === true).length : 0;
+  const wrongCount = isQuiz ? answers.filter((a) => a.isCorrect === false).length : 0;
+  const correctPercent = total > 0 ? (correctCount / total) * 100 : 0;
+  const wrongPercent = total > 0 ? (wrongCount / total) * 100 : 0;
+
+  const studentStats = Array.from(new Set(answers.map((a) => a.name)))
+    .map((name) => {
+      const studentAnswers = answers.filter((a) => a.name === name);
+      const correct = studentAnswers.filter((a) => a.isCorrect === true).length;
+      const wrong = studentAnswers.filter((a) => a.isCorrect === false).length;
+      const answered = studentAnswers[0];
+      return {
+        name,
+        avatar: answered?.avatar,
+        optionIndex: answered?.optionIndex,
+        answerText: answered?.answerText,
+        isCorrect: answered?.isCorrect,
+        correct,
+        wrong,
+      };
+    })
+    .sort((a, b) => b.correct - a.correct);
+
+  return (
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="shrink-0 mb-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-[#5B3FD1]/30 to-[#18BFC7]/30 border border-[#7C5CE7]/40">
+            <Trophy className="w-3.5 h-3.5 text-[#FFB800]" />
+            <span className="text-[10px] uppercase tracking-widest text-[#FFB800] font-black">
+              Резултати
+            </span>
+          </div>
+
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
+            <Users className="w-3.5 h-3.5 text-[#4cc9ff]" />
+            <span className="text-xs text-white/80 font-bold">
+              {uniqueResponders} / {totalStudents} отговорили
+            </span>
+          </div>
+        </div>
+
+        <h2 className="text-2xl sm:text-3xl font-bold text-white leading-tight mt-4">
+          {slide.title || (isQuiz ? "Тест" : "Анкета")}
+        </h2>
+
+        {slide.question && (
+          <p className="text-base sm:text-lg font-semibold mt-2 text-white/70">
+            {slide.question}
+          </p>
+        )}
+      </div>
+
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 overflow-hidden">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-6 flex flex-col justify-center">
+          <div className="flex items-center gap-8 flex-wrap justify-center">
+            {isQuiz ? (
+              <DonutChart
+                value={correctPercent}
+                label="ВЕРНИ"
+                sublabel={`${correctCount} от ${total}`}
+                color="#00E676"
+                size={200}
+              />
+            ) : (
+              <DonutChart
+                value={100}
+                label="ОТГОВОРИЛИ"
+                sublabel={`${total} гласа`}
+                color="#5B3FD1"
+                size={200}
+              />
+            )}
+
+            <div className="flex-1 min-w-[200px] space-y-4">
+              {isQuiz ? (
+                <>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-green-500" />
+                        <span className="text-sm text-white/70 font-medium">Верни</span>
+                      </div>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-2xl font-black text-green-400">{correctCount}</span>
+                        <span className="text-sm text-white/50 font-bold">{Math.round(correctPercent)}%</span>
+                      </div>
+                    </div>
+                    <div className="h-2 rounded-full bg-white/5 overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${correctPercent}%` }}
+                        transition={{ duration: 0.8, ease: "easeOut" }}
+                        className="h-full rounded-full bg-gradient-to-r from-green-500 to-green-400"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-red-500" />
+                        <span className="text-sm text-white/70 font-medium">Грешни</span>
+                      </div>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-2xl font-black text-red-400">{wrongCount}</span>
+                        <span className="text-sm text-white/50 font-bold">{Math.round(wrongPercent)}%</span>
+                      </div>
+                    </div>
+                    <div className="h-2 rounded-full bg-white/5 overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${wrongPercent}%` }}
+                        transition={{ duration: 0.8, ease: "easeOut" }}
+                        className="h-full rounded-full bg-gradient-to-r from-red-500 to-red-400"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-white/10 flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-wider text-white/40 font-bold">
+                      Общо отговори
+                    </span>
+                    <span className="text-3xl font-black text-white">{total}</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-white/70 font-medium">Общо гласове</span>
+                    <span className="text-3xl font-black text-white">{total}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-white/70 font-medium">Ученици</span>
+                    <span className="text-3xl font-black text-[#4cc9ff]">{uniqueResponders}</span>
+                  </div>
+
+                  <div className="pt-4 border-t border-white/10">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs uppercase tracking-wider text-white/40 font-bold">
+                        Опции
+                      </span>
+                      <span className="text-2xl font-bold text-white">{slide.options?.length || 0}</span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-5 flex flex-col overflow-hidden">
+          <h3 className="text-[10px] uppercase tracking-widest text-white/40 font-black mb-4 flex items-center gap-2 shrink-0">
+            <Award className="w-3.5 h-3.5" />
+            Отговори на учениците ({studentStats.length})
+          </h3>
+
+          <div className="flex-1 overflow-y-auto -mx-2 px-2">
+            {studentStats.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <div className="w-14 h-14 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-3">
+                  <Users className="w-6 h-6 text-white/30" />
+                </div>
+                <p className="text-sm text-white/50">Няма отговори</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {studentStats.map((s, idx) => (
+                  <motion.div
+                    key={s.name}
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: idx * 0.05 }}
+                    className={`flex items-center gap-3 p-2.5 rounded-xl border ${
+                      s.isCorrect === true
+                        ? "bg-green-500/10 border-green-500/30"
+                        : s.isCorrect === false
+                        ? "bg-red-500/10 border-red-500/30"
+                        : "bg-white/5 border-white/10"
+                    }`}
+                  >
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#5B3FD1] to-[#18BFC7] flex items-center justify-center text-base shrink-0 border border-white/20">
+                      {s.avatar || s.name.charAt(0).toUpperCase()}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-white truncate">
+                          {s.name}
+                        </span>
+                        {s.isCorrect === true && (
+                          <Check className="w-3.5 h-3.5 text-green-400 shrink-0" strokeWidth={3} />
+                        )}
+                        {s.isCorrect === false && (
+                          <X className="w-3.5 h-3.5 text-red-400 shrink-0" strokeWidth={3} />
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span
+                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            s.isCorrect === true
+                              ? "bg-green-500/30 text-green-300"
+                              : s.isCorrect === false
+                              ? "bg-red-500/30 text-red-300"
+                              : "bg-white/10 text-white/60"
+                          }`}
+                        >
+                          {String.fromCharCode(65 + (s.optionIndex ?? 0))}
+                        </span>
+                        <span className="text-xs text-white/60 truncate">
+                          {s.answerText || "—"}
+                        </span>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── Main Component ───────────────────────────────────────────────
 
 export const PresentationViewer: React.FC = () => {
@@ -129,16 +770,15 @@ export const PresentationViewer: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [showStudents, setShowStudents] = useState(true);
 
-  // 🔥 Reactions
   const [reactions, setReactions] = useState<ReactionBurst[]>([]);
   const reactionIdRef = useRef(0);
   const [reactionCounts, setReactionCounts] = useState<Record<string, number>>({});
 
-  // ⏱ Session timer
+  const [answersBySlide, setAnswersBySlide] = useState<Record<number, AnswerData[]>>({});
+
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const startTimeRef = useRef<number>(Date.now());
 
-  // 🚪 End session state
   const [isEnding, setIsEnding] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
 
@@ -148,7 +788,6 @@ export const PresentationViewer: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const sessionEndedRef = useRef(false);
 
-  // Синхронизираме refs
   useEffect(() => {
     currentIndexRef.current = currentIndex;
   }, [currentIndex]);
@@ -157,15 +796,48 @@ export const PresentationViewer: React.FC = () => {
     slidesRef.current = slides;
   }, [slides]);
 
-  // 🔥 ОБЕДИНЕН масив: QR + реални слайдове
-  const slidesWithQR = useMemo(() => {
-    if (!sessionId) return slides;
-    return [{ id: "__qr__", type: "__qr__", title: "QR код" }, ...slides];
+  // 🔥 VIRTUAL SLIDES: Join + real slides + Results slides after each quiz/poll
+  const virtualSlides = useMemo(() => {
+    const result: any[] = [];
+
+    if (sessionId) {
+      result.push({
+        id: "__join__",
+        type: "__join__",
+        title: "Join",
+        __isVirtual: true,
+        __realIndex: -1,
+      });
+    }
+
+    slides.forEach((slide, idx) => {
+      result.push({
+        ...slide,
+        __isVirtual: false,
+        __realIndex: idx,
+      });
+
+      if (slide.type === "quiz" || slide.type === "poll") {
+        result.push({
+          id: `__results_${idx}__`,
+          type: "__results__",
+          originalSlide: slide,
+          originalSlideIndex: idx,
+          title: "Резултати",
+          __isVirtual: true,
+          __realIndex: idx,
+        });
+      }
+    });
+
+    return result;
   }, [slides, sessionId]);
 
-  const isShowingQR = currentIndex === 0;
-  const actualSlideIndex = currentIndex - 1;
-  const totalSlides = slidesWithQR.length;
+  const currentVirtualSlide = virtualSlides[currentIndex];
+  const isShowingJoin = currentVirtualSlide?.type === "__join__";
+  const isShowingResults = currentVirtualSlide?.type === "__results__";
+  const actualSlideIndex = currentVirtualSlide?.__realIndex ?? -1;
+  const totalVirtualSlides = virtualSlides.length;
 
   // ⏱ Timer
   useEffect(() => {
@@ -250,7 +922,6 @@ export const PresentationViewer: React.FC = () => {
             break;
           }
 
-          // 🔥 Reaction от ученик
           case "REACTION": {
             if (msg.reaction) {
               const burst: ReactionBurst = {
@@ -265,6 +936,41 @@ export const PresentationViewer: React.FC = () => {
                 [msg.reaction]: (prev[msg.reaction] || 0) + 1,
               }));
             }
+            break;
+          }
+
+          case "POLL_ANSWER": {
+            const slideIdx =
+              msg.slideIndex !== undefined
+                ? msg.slideIndex
+                : msg.slide ?? currentIndexRef.current - 1;
+
+            const optionIdx =
+              msg.answerIndex !== undefined ? msg.answerIndex : null;
+
+            if (optionIdx === null) break;
+
+            const answerData: AnswerData = {
+              optionIndex: optionIdx,
+              answerText: msg.answerText || "",
+              isCorrect: msg.isCorrect ?? null,
+              name: msg.name || "Анонимен",
+              avatar: msg.avatar,
+              timestamp: msg.timestamp || Date.now(),
+            };
+
+            setAnswersBySlide((prev) => {
+              const existing = prev[slideIdx] || [];
+              const filtered = existing.filter((a) => a.name !== answerData.name);
+              return {
+                ...prev,
+                [slideIdx]: [...filtered, answerData],
+              };
+            });
+
+            console.log(
+              `📊 Отговор: ${answerData.avatar || ""} ${answerData.name} → слайд ${slideIdx}, опция ${optionIdx}`
+            );
             break;
           }
 
@@ -287,47 +993,50 @@ export const PresentationViewer: React.FC = () => {
     };
   }, [sessionId]);
 
-  // ─── Broadcast ─────────────────────────────────────────────────
-  const broadcast = useCallback((actualIndex: number) => {
+  // ─── Broadcast ───────────────────────────────────────────────
+  const broadcast = useCallback((virtualIndex: number) => {
+    const virtualSlide = virtualSlides[virtualIndex];
+    if (!virtualSlide) return;
+
+    const realIndex = virtualSlide.__realIndex;
+    if (realIndex < 0) return;
+
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(
         JSON.stringify({
           type: "SLIDE_CHANGED",
-          slide: actualIndex,
+          slide: realIndex,
           slides: slidesRef.current,
         })
       );
     }
-  }, []);
+  }, [virtualSlides]);
 
   // ─── Навигация ─────────────────────────────────────────────────
   const goNext = useCallback(() => {
     const nextIndex = currentIndexRef.current + 1;
-    if (nextIndex >= totalSlides) return;
+    if (nextIndex >= totalVirtualSlides) return;
     setDirection(1);
     setCurrentIndex(nextIndex);
-    const actualIndex = nextIndex - 1;
-    if (actualIndex >= 0) broadcast(actualIndex);
-  }, [totalSlides, broadcast]);
+    broadcast(nextIndex);
+  }, [totalVirtualSlides, broadcast]);
 
   const goPrev = useCallback(() => {
     const prevIndex = currentIndexRef.current - 1;
     if (prevIndex < 0) return;
     setDirection(-1);
     setCurrentIndex(prevIndex);
-    const actualIndex = prevIndex - 1;
-    if (actualIndex >= 0) broadcast(actualIndex);
+    broadcast(prevIndex);
   }, [broadcast]);
 
   const goToSlide = useCallback(
     (index: number) => {
-      if (index < 0 || index >= totalSlides) return;
+      if (index < 0 || index >= totalVirtualSlides) return;
       setDirection(index > currentIndexRef.current ? 1 : -1);
       setCurrentIndex(index);
-      const actualIndex = index - 1;
-      if (actualIndex >= 0) broadcast(actualIndex);
+      broadcast(index);
     },
-    [totalSlides, broadcast]
+    [totalVirtualSlides, broadcast]
   );
 
   // ─── Keyboard ──────────────────────────────────────────────────
@@ -373,47 +1082,30 @@ export const PresentationViewer: React.FC = () => {
   // ─── End Session ───────────────────────────────────────────────
   const endSession = useCallback(async () => {
     if (!sessionId) return;
-
     setIsEnding(true);
     sessionEndedRef.current = true;
 
     try {
-      // 1. Затваряме WS
       wsRef.current?.close();
-
-      // 2. Изтриваме сесията от сървъра (записва ended_at в DB)
-      await fetch(`${API_URL}/api/sessions/${sessionId}`, {
-        method: "DELETE",
-      });
-
+      await fetch(`${API_URL}/api/sessions/${sessionId}`, { method: "DELETE" });
       console.log("✅ Сесията е приключена");
     } catch (err) {
       console.error("End session error:", err);
     } finally {
-      // 3. Пренасочваме към редактора
       window.location.href = "/create";
     }
   }, [sessionId]);
 
-  // ─── Auto-end при затваряне на таба ────────────────────────────
-  // Използваме fetch с keepalive (поддържа DELETE), НЕ sendBeacon
-  // (sendBeacon изпраща само POST и не работи с DELETE endpoint)
   useEffect(() => {
     const handler = () => {
       if (sessionId && !sessionEndedRef.current) {
         sessionEndedRef.current = true;
-
-        // fetch с keepalive гарантира, че заявката ще се изпрати
-        // дори когато потребителят затваря таба
         fetch(`${API_URL}/api/sessions/${sessionId}`, {
           method: "DELETE",
           keepalive: true,
-        }).catch(() => {
-          // Игнорираме грешки – табът се затваря все пак
-        });
+        }).catch(() => {});
       }
     };
-
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [sessionId]);
@@ -443,7 +1135,6 @@ export const PresentationViewer: React.FC = () => {
           </div>
           <p className="text-2xl font-bold text-red-400 mb-2">Свързването неуспешно</p>
           <p className="text-white/50 text-sm">Моля, опитайте отново.</p>
-          <p className="mt-4 text-xs text-white/30 font-mono">Session: {sessionId}</p>
         </div>
       </div>
     );
@@ -467,14 +1158,17 @@ export const PresentationViewer: React.FC = () => {
     );
   }
 
-  const currentSlideData = slidesWithQR[currentIndex];
-  const progress = isShowingQR ? 0 : ((actualSlideIndex + 1) / slides.length) * 100;
+  const progress = isShowingJoin ? 0 : ((currentIndex) / (totalVirtualSlides - 1)) * 100;
   const canGoPrev = currentIndex > 0;
-  const canGoNext = currentIndex < totalSlides - 1;
-  const joinUrl = `${window.location.origin}/view?session=${sessionId}`;
+  const canGoNext = currentIndex < totalVirtualSlides - 1;
+  const joinUrl = `${window.location.origin}/join`;
 
-  // Общо реакции
   const totalReactions = Object.values(reactionCounts).reduce((a, b) => a + b, 0);
+
+  const currentRealSlide = actualSlideIndex >= 0 ? slides[actualSlideIndex] : null;
+  const currentAnswers = answersBySlide[actualSlideIndex] || [];
+  const isCurrentInteractive = currentRealSlide &&
+    (currentRealSlide.type === "quiz" || currentRealSlide.type === "poll");
 
   return (
     <div
@@ -493,8 +1187,7 @@ export const PresentationViewer: React.FC = () => {
 
       {/* Top bar */}
       <div className="absolute top-4 left-4 right-4 z-40 flex items-center justify-between pointer-events-none">
-        <div className="flex items-center gap-2 pointer-events-auto">
-          {/* Status pill */}
+        <div className="flex items-center gap-2 pointer-events-auto flex-wrap">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10">
             {status === "online" ? (
               <>
@@ -509,7 +1202,6 @@ export const PresentationViewer: React.FC = () => {
             )}
           </div>
 
-          {/* ⏱ Timer */}
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10">
             <Clock className="w-3.5 h-3.5 text-[#4cc9ff]" />
             <span className="text-xs text-white/80 font-mono font-medium">
@@ -517,7 +1209,6 @@ export const PresentationViewer: React.FC = () => {
             </span>
           </div>
 
-          {/* 🔥 Reactions count */}
           {totalReactions > 0 && (
             <motion.div
               initial={{ scale: 0, opacity: 0 }}
@@ -528,14 +1219,38 @@ export const PresentationViewer: React.FC = () => {
               <span className="text-xs text-white font-bold">{totalReactions}</span>
             </motion.div>
           )}
+
+          {isCurrentInteractive && !isShowingResults && currentAnswers.length > 0 && (
+            <motion.div
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-[#00E676]/30 to-[#00BFA5]/30 backdrop-blur-md border border-[#00E676]/40"
+            >
+              <BarChart3 className="w-3.5 h-3.5 text-[#00E676]" />
+              <span className="text-xs text-white font-bold">
+                {currentAnswers.length} отговора
+              </span>
+            </motion.div>
+          )}
+
+          {isShowingResults && (
+            <motion.div
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-[#FFB800]/30 to-[#FF8A00]/30 backdrop-blur-md border border-[#FFB800]/40"
+            >
+              <Trophy className="w-3.5 h-3.5 text-[#FFB800]" />
+              <span className="text-xs text-white font-black uppercase tracking-wider">
+                РЕЗУЛТАТИ
+              </span>
+            </motion.div>
+          )}
         </div>
 
         <div className="flex items-center gap-2 pointer-events-auto">
-          {/* Students toggle */}
           <button
             onClick={() => setShowStudents((v) => !v)}
             className="relative w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-white/80 hover:text-white transition-all"
-            title={showStudents ? "Скрий списъка с ученици" : "Покажи списъка с ученици"}
           >
             {showStudents ? (
               <PanelRightClose className="w-4 h-4" />
@@ -549,7 +1264,6 @@ export const PresentationViewer: React.FC = () => {
             )}
           </button>
 
-          {/* Fullscreen */}
           <button
             onClick={toggleFullscreen}
             className="w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-white/80 hover:text-white transition-all"
@@ -557,11 +1271,9 @@ export const PresentationViewer: React.FC = () => {
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
 
-          {/* 🚪 End session */}
           <button
             onClick={() => setShowEndConfirm(true)}
             className="w-10 h-10 rounded-full bg-red-500/20 hover:bg-red-500/40 backdrop-blur-md border border-red-500/40 flex items-center justify-center text-red-300 hover:text-red-200 transition-all"
-            title="Приключи сесията"
           >
             <LogOut className="w-4 h-4" />
           </button>
@@ -570,7 +1282,6 @@ export const PresentationViewer: React.FC = () => {
 
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* 🔥 Floating reactions overlay */}
         <div className="absolute inset-0 pointer-events-none z-30">
           <AnimatePresence>
             {reactions.map((r) => (
@@ -583,7 +1294,6 @@ export const PresentationViewer: React.FC = () => {
           </AnimatePresence>
         </div>
 
-        {/* Slides area */}
         <div className="flex-1 flex items-center justify-center p-4 sm:p-6 md:p-10 overflow-hidden">
           <div className="w-full max-w-7xl flex items-center justify-center gap-4 sm:gap-6">
             <button
@@ -610,10 +1320,22 @@ export const PresentationViewer: React.FC = () => {
                   transition={{ duration: 0.35, ease: "easeOut" }}
                   className="absolute inset-0 p-6 sm:p-10 md:p-12 overflow-y-auto"
                 >
-                  {isShowingQR ? (
-                    <QRCodeSlide sessionId={sessionId} />
+                  {isShowingJoin ? (
+                    <JoinSlide sessionId={sessionId} />
+                  ) : isShowingResults ? (
+                    <ResultsSlide
+                      slide={currentVirtualSlide.originalSlide}
+                      answers={currentAnswers}
+                      totalStudents={students.length}
+                    />
+                  ) : isCurrentInteractive ? (
+                    <LiveResults
+                      slide={currentRealSlide}
+                      slideIndex={actualSlideIndex}
+                      answers={currentAnswers}
+                    />
                   ) : (
-                    <SlideViewer slide={currentSlideData} />
+                    <SlideViewer slide={currentRealSlide} />
                   )}
                 </motion.div>
               </AnimatePresence>
@@ -660,24 +1382,38 @@ export const PresentationViewer: React.FC = () => {
                     <div className="text-center py-6 rounded-xl bg-white/5 border border-dashed border-white/10">
                       <Users className="w-8 h-8 mx-auto mb-2 text-white/20" />
                       <p className="text-[11px] text-white/30">Никой още не се е свързал</p>
-                      <p className="text-[10px] text-white/20 mt-0.5">Сподели QR кода</p>
+                      <p className="text-[10px] text-white/20 mt-0.5">Сподели кода</p>
                     </div>
                   ) : (
                     <div className="space-y-1.5">
-                      {students.map((s, i) => (
-                        <div
-                          key={`${s.name}-${i}`}
-                          className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg bg-white/5 border border-white/5 hover:bg-white/10 transition-colors"
-                        >
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#5B3FD1] to-[#18BFC7] flex items-center justify-center text-base shrink-0 border border-[#7C5CE7]/40">
-                            {s.avatar || s.name.charAt(0).toUpperCase()}
+                      {students.map((s, i) => {
+                        const hasAnsweredCurrent =
+                          isCurrentInteractive &&
+                          currentAnswers.some((a) => a.name === s.name);
+
+                        return (
+                          <div
+                            key={`${s.name}-${i}`}
+                            className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg border transition-colors ${
+                              hasAnsweredCurrent
+                                ? "bg-green-500/10 border-green-500/30"
+                                : "bg-white/5 border-white/5 hover:bg-white/10"
+                            }`}
+                          >
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#5B3FD1] to-[#18BFC7] flex items-center justify-center text-base shrink-0 border border-[#7C5CE7]/40">
+                              {s.avatar || s.name.charAt(0).toUpperCase()}
+                            </div>
+                            <span className="text-xs text-white/85 font-medium truncate flex-1">
+                              {s.name}
+                            </span>
+                            {hasAnsweredCurrent ? (
+                              <Check className="w-3 h-3 text-green-400 shrink-0" strokeWidth={3} />
+                            ) : (
+                              <Circle className="w-2 h-2 fill-green-400 text-green-400 shrink-0" />
+                            )}
                           </div>
-                          <span className="text-xs text-white/85 font-medium truncate flex-1">
-                            {s.name}
-                          </span>
-                          <Circle className="w-2 h-2 fill-green-400 text-green-400 shrink-0" />
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -698,24 +1434,36 @@ export const PresentationViewer: React.FC = () => {
       {/* Bottom bar */}
       <div className="shrink-0 flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 bg-black/30 backdrop-blur-sm border-t border-white/5 z-20">
         <div className="flex gap-1.5 sm:gap-2 max-w-[30%] overflow-x-auto items-center">
-          {slidesWithQR.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => goToSlide(i)}
-              className={`shrink-0 h-2.5 rounded-full transition-all ${
-                i === currentIndex
-                  ? i === 0
-                    ? "bg-[#18BFC7] w-8"
-                    : "bg-[#5B3FD1] w-8"
-                  : "bg-white/20 hover:bg-white/40 w-2.5"
-              }`}
-            />
-          ))}
+          {virtualSlides.map((slide, i) => {
+            const isJoin = slide.type === "__join__";
+            const isResults = slide.type === "__results__";
+
+            return (
+              <button
+                key={i}
+                onClick={() => goToSlide(i)}
+                className={`shrink-0 h-2.5 rounded-full transition-all ${
+                  i === currentIndex
+                    ? isJoin
+                      ? "bg-[#18BFC7] w-8"
+                      : isResults
+                      ? "bg-[#FFB800] w-8"
+                      : "bg-[#5B3FD1] w-8"
+                    : isResults
+                    ? "bg-[#FFB800]/30 hover:bg-[#FFB800]/60 w-2.5"
+                    : "bg-white/20 hover:bg-white/40 w-2.5"
+                }`}
+                title={isJoin ? "Join" : isResults ? "Резултати" : `Слайд ${i}`}
+              />
+            );
+          })}
         </div>
 
         <span className="text-xs sm:text-sm text-white/50 font-mono">
-          {isShowingQR ? (
-            <span className="text-[#18BFC7]">📱 QR код</span>
+          {isShowingJoin ? (
+            <span className="text-[#18BFC7]">🎯 Join</span>
+          ) : isShowingResults ? (
+            <span className="text-[#FFB800]">🏆 Резултати</span>
           ) : (
             <>
               {actualSlideIndex + 1} / {slides.length}
@@ -769,7 +1517,6 @@ export const PresentationViewer: React.FC = () => {
                   Учениците ще загубят връзка с презентацията. Данните ще бъдат запазени в статистиката.
                 </p>
 
-                {/* Кратка статистика */}
                 <div className="grid grid-cols-3 gap-3 mb-6">
                   <div className="p-3 rounded-xl bg-white/5 border border-white/10">
                     <p className="text-2xl font-bold text-white">{formatTime(elapsedSeconds)}</p>
